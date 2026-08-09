@@ -28,9 +28,12 @@
         <button class="nav-button" data-section="abilities"><span class="nav-number">06</span>Abilità</button>
         <button class="nav-button" data-section="skills"><span class="nav-number">07</span>Skill</button>
         <button class="nav-button" data-section="conditions"><span class="nav-number">08</span>Stato</button>
-        <button class="nav-button" data-section="relationships"><span class="nav-number">09</span>Relazioni</button>
+        <button class="nav-button" data-section="inventory"><span class="nav-number">09</span>Inventario</button>
+        <button class="nav-button" data-section="magic"><span class="nav-number">10</span>Magie</button>
+        <button class="nav-button" data-section="relationships"><span class="nav-number">11</span>Relazioni</button>
     </nav>
     <div class="sidebar-title character-list-title">PERSONAGGI SALVATI</div>
+    <div class="character-search"><input id="characterSearch" type="search" placeholder="Cerca nome, cognome o soprannome..."></div>
     <div id="characterList" class="character-list"><div class="character-list-empty">Nessun personaggio salvato.</div></div>
 </aside>
 
@@ -63,98 +66,31 @@
     <div class="card"><div class="card-title">Aspetto</div><textarea id="appearance"></textarea></div>
 </div>
 
-<div id="languagesSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">02</span><h2>Lingue</h2><p>Lingue conosciute dal personaggio.</p></div></div>
-    <div class="card"><div class="card-title">Aggiungi lingua</div><div class="language-add-row"><select id="languageSelect"><option value="">Seleziona una lingua</option></select><button id="addLanguageButton" type="button" class="secondary-button">+ Aggiungi</button></div></div>
-    <div class="card"><div class="card-title">Lingue conosciute</div><div id="languagesList" class="languages-list"></div></div>
-</div>
+<div id="languagesSection" class="section hidden"><div class="section-header"><div><span class="section-number">02</span><h2>Lingue</h2><p>Lingue conosciute dal personaggio.</p></div></div><div class="card"><div class="card-title">Aggiungi lingua</div><div class="language-add-row"><select id="languageSelect"><option value="">Seleziona una lingua</option></select><button id="addLanguageButton" type="button" class="secondary-button">+ Aggiungi</button></div></div><div class="card"><div class="card-title">Lingue conosciute</div><div id="languagesList" class="languages-list"></div></div></div>
 
-<div id="psychologySection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">03</span><h2>Psicologia</h2><p>Stato mentale, paure, desideri e comportamento.</p></div></div>
-    <div class="card"><div class="form-grid">
-        <div class="field field-wide"><label>Stato mentale</label><textarea id="mentalState"></textarea></div>
-        <div class="field field-wide"><label>Stabilità emotiva</label><textarea id="emotionalStability"></textarea></div>
-        <div class="field field-wide"><label>Paure</label><textarea id="fears"></textarea></div>
-        <div class="field field-wide"><label>Desideri e obiettivi</label><textarea id="desires"></textarea></div>
-        <div class="field field-wide"><label>Valori e convinzioni</label><textarea id="values"></textarea></div>
-        <div class="field field-wide"><label>Traumi ed esperienze formative</label><textarea id="traumas"></textarea></div>
-    </div></div>
-</div>
+<div id="psychologySection" class="section hidden"><div class="section-header"><div><span class="section-number">03</span><h2>Psicologia</h2><p>Stato mentale, paure, desideri e comportamento.</p></div></div><div class="card"><div class="form-grid"><div class="field field-wide"><label>Stato mentale</label><textarea id="mentalState"></textarea></div><div class="field field-wide"><label>Stabilità emotiva</label><textarea id="emotionalStability"></textarea></div><div class="field field-wide"><label>Paure</label><textarea id="fears"></textarea></div><div class="field field-wide"><label>Desideri e obiettivi</label><textarea id="desires"></textarea></div><div class="field field-wide"><label>Valori e convinzioni</label><textarea id="values"></textarea></div><div class="field field-wide"><label>Traumi ed esperienze formative</label><textarea id="traumas"></textarea></div></div></div></div>
 
-<div id="personalitySection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">04</span><h2>Personalità</h2><p>Tratti e comportamenti del personaggio.</p></div></div>
-    <div class="card"><div class="form-grid">
-        <div class="field field-wide"><label>Personalità generale</label><textarea id="personalityDescription"></textarea></div>
-        <div class="field field-wide"><label>Tratti caratteriali</label><textarea id="traits"></textarea></div>
-        <div class="field field-wide"><label>Pregi</label><textarea id="strengths"></textarea></div>
-        <div class="field field-wide"><label>Difetti</label><textarea id="flaws"></textarea></div>
-        <div class="field field-wide"><label>Abitudini</label><textarea id="habits"></textarea></div>
-        <div class="field field-wide"><label>Comportamento sociale</label><textarea id="socialBehavior"></textarea></div>
-    </div></div>
-</div>
+<div id="personalitySection" class="section hidden"><div class="section-header"><div><span class="section-number">04</span><h2>Personalità</h2><p>Tratti e comportamenti del personaggio.</p></div></div><div class="card"><div class="form-grid"><div class="field field-wide"><label>Personalità generale</label><textarea id="personalityDescription"></textarea></div><div class="field field-wide"><label>Tratti caratteriali</label><textarea id="traits"></textarea></div><div class="field field-wide"><label>Pregi</label><textarea id="strengths"></textarea></div><div class="field field-wide"><label>Difetti</label><textarea id="flaws"></textarea></div><div class="field field-wide"><label>Abitudini</label><textarea id="habits"></textarea></div><div class="field field-wide"><label>Comportamento sociale</label><textarea id="socialBehavior"></textarea></div></div></div></div>
 
-<div id="statisticsSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">05</span><h2>Statistiche</h2><p>Valori numerici e livello del personaggio.</p></div></div>
-    <div class="card level-card"><div class="level-card-label">LIVELLO</div><div id="characterLevel" class="character-level">1</div><div id="characterLevelText" class="level-card-text">Personaggio appena creato</div></div>
-    <div class="section-tools"><button id="generateBaseStatsButton" class="primary-button">Genera valori base</button><button id="resetExtraButton" class="secondary-button">Ripristina</button></div>
-    <div class="card"><div id="statisticsEditor" class="advanced-grid"></div></div>
-</div>
+<div id="statisticsSection" class="section hidden"><div class="section-header"><div><span class="section-number">05</span><h2>Statistiche</h2><p>Valori numerici e livello del personaggio.</p></div></div><div class="card level-card"><div class="level-card-label">LIVELLO</div><div id="characterLevel" class="character-level">1</div><div id="characterLevelText" class="level-card-text">Personaggio appena creato</div></div><div class="section-tools"><button id="generateBaseStatsButton" class="primary-button">Genera valori base</button><button id="resetExtraButton" class="secondary-button">Ripristina</button></div><div class="card"><div id="statisticsEditor" class="advanced-grid"></div></div></div>
 
-<div id="abilitiesSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">06</span><h2>Abilità</h2><p>Poteri, capacità innate e capacità speciali.</p></div></div>
-    <div class="card"><div class="form-grid"><div class="field"><label>Nome abilità</label><input id="abilityName"></div><div class="field"><label>Descrizione</label><input id="abilityDescription"></div></div><button id="addAbilityButton" class="secondary-button">+ Aggiungi abilità</button></div>
-    <div class="card"><div id="abilitiesList"></div></div>
-</div>
+<div id="abilitiesSection" class="section hidden"><div class="section-header"><div><span class="section-number">06</span><h2>Abilità</h2><p>Poteri, capacità innate e capacità speciali.</p></div></div><div class="card"><div class="form-grid"><div class="field"><label>Nome abilità</label><input id="abilityName"></div><div class="field"><label>Descrizione</label><input id="abilityDescription"></div></div><button id="addAbilityButton" class="secondary-button">+ Aggiungi abilità</button></div><div class="card"><div id="abilitiesList"></div></div></div>
 
-<div id="skillsSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">07</span><h2>Skill</h2><p>Competenze apprese dal personaggio.</p></div></div>
-    <div class="card"><div class="form-grid"><div class="field"><label>Nome skill</label><input id="skillName"></div><div class="field"><label>Descrizione</label><input id="skillDescription"></div></div><button id="addSkillButton" class="secondary-button">+ Aggiungi skill</button></div>
-    <div class="card"><div id="skillsList"></div></div>
-</div>
+<div id="skillsSection" class="section hidden"><div class="section-header"><div><span class="section-number">07</span><h2>Skill</h2><p>Competenze apprese dal personaggio.</p></div></div><div class="card"><div class="form-grid"><div class="field"><label>Nome skill</label><input id="skillName"></div><div class="field"><label>Descrizione</label><input id="skillDescription"></div></div><button id="addSkillButton" class="secondary-button">+ Aggiungi skill</button></div><div class="card"><div id="skillsList"></div></div></div>
 
-<div id="conditionsSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">08</span><h2>Stato</h2><p>Condizioni attuali del personaggio.</p></div></div>
-    <div class="card"><div class="condition-grid"><div class="field"><label>Salute</label><input id="conditionHealth" type="number" min="0"></div><div class="field"><label>Resistenza</label><input id="conditionStamina" type="number" min="0"></div><div class="field"><label>Mana</label><input id="conditionMana" type="number" min="0"></div><div class="field"><label>Stato</label><input id="conditionStatus"></div></div></div>
-</div>
+<div id="conditionsSection" class="section hidden"><div class="section-header"><div><span class="section-number">08</span><h2>Stato</h2><p>Condizioni attuali del personaggio.</p></div></div><div class="card"><div class="condition-grid"><div class="field"><label>Salute</label><input id="conditionHealth" type="number" min="0"></div><div class="field"><label>Resistenza</label><input id="conditionStamina" type="number" min="0"></div><div class="field"><label>Mana</label><input id="conditionMana" type="number" min="0"></div><div class="field"><label>Stato</label><input id="conditionStatus"></div></div></div></div>
 
-<div id="relationshipsSection" class="section hidden">
-    <div class="section-header"><div><span class="section-number">09</span><h2>Relazioni</h2><p>Legami conosciuti dal personaggio.</p></div></div>
-    <div class="card"><div class="form-grid"><div class="field"><label>Personaggio</label><input id="relationshipName"></div><div class="field"><label>Descrizione del rapporto</label><input id="relationshipDescription"></div></div><button id="addRelationshipButton" class="secondary-button">+ Aggiungi relazione</button></div>
-    <div class="card"><div id="relationshipsList"></div></div>
-</div>
+<div id="inventorySection" class="section hidden"><div class="section-header"><div><span class="section-number">09</span><h2>Inventario</h2><p>Equipaggiamento, armatura, armi, oggetti e denaro.</p></div></div><div class="card"><div class="card-title">Denaro</div><div id="moneyEditor" class="advanced-grid"></div></div><div class="card"><div class="card-title">Armatura ed equipaggiamento</div><div id="armorEditor" class="advanced-grid"></div></div><div class="card"><div class="card-title">Armi</div><div id="weaponsEditor" class="advanced-grid"></div></div><div class="card"><div class="card-title">Oggetti</div><div class="form-grid"><div class="field"><label>Nome</label><input id="inventoryItemName"></div><div class="field"><label>Quantità</label><input id="inventoryItemQuantity" type="number" min="1" value="1"></div><div class="field field-wide"><label>Descrizione</label><input id="inventoryItemDescription"></div></div><button id="addInventoryItemButton" class="secondary-button">+ Aggiungi oggetto</button></div><div class="card"><div id="inventoryItemsList"></div></div></div>
 
-<div id="characterSummary" class="character-summary">
-    <div class="summary-topline"><span>PROFILO</span><span id="summaryLevelBadge">LIV. 1</span></div>
-    <div id="summaryTitle" class="summary-title">Nuovo personaggio</div>
-    <p id="summaryText" class="summary-text">Genera un personaggio per ottenere un riepilogo completo.</p>
-    <div class="summary-facts">
-        <div><span>Razza</span><strong id="summaryRace">—</strong></div>
-        <div><span>Età</span><strong id="summaryAge">—</strong></div>
-        <div><span>Focus</span><strong id="summaryFocus">—</strong></div>
-        <div><span>Stato</span><strong id="summaryStatus">Normale</strong></div>
-    </div>
-</div>
+<div id="magicSection" class="section hidden"><div class="section-header"><div><span class="section-number">10</span><h2>Magie</h2><p>Tutte le magie realmente apprese dal personaggio, organizzate per categoria.</p></div></div><div id="magicCategories" class="magic-categories"></div></div>
+
+<div id="relationshipsSection" class="section hidden"><div class="section-header"><div><span class="section-number">11</span><h2>Relazioni</h2><p>Legami conosciuti dal personaggio.</p></div></div><div class="card"><div class="form-grid"><div class="field"><label>Personaggio</label><input id="relationshipName"></div><div class="field"><label>Descrizione del rapporto</label><input id="relationshipDescription"></div></div><button id="addRelationshipButton" class="secondary-button">+ Aggiungi relazione</button></div><div class="card"><div id="relationshipsList"></div></div></div>
+
+<div id="characterSummary" class="character-summary"><div class="summary-topline"><span>PROFILO</span><span id="summaryLevelBadge">LIV. 1</span></div><div id="summaryTitle" class="summary-title">Nuovo personaggio</div><p id="summaryText" class="summary-text">Genera un personaggio per ottenere un riepilogo completo.</p><div class="summary-facts"><div><span>Razza</span><strong id="summaryRace">—</strong></div><div><span>Età</span><strong id="summaryAge">—</strong></div><div><span>Focus</span><strong id="summaryFocus">—</strong></div><div><span>Stato</span><strong id="summaryStatus">Normale</strong></div></div></div>
 </section>
 </main>
 </div>
-
-<div id="generationOverlay" class="generation-overlay hidden">
-<div class="generation-window">
-    <div class="generation-symbol">✦</div><div class="generation-title">CREAZIONE PERSONAGGIO</div>
-    <div id="generationName" class="generation-name">Generazione in corso...</div>
-    <div class="progress-container"><div id="progressBar" class="progress-bar"></div></div>
-    <div id="progressText" class="progress-text">0%</div>
-    <div class="generation-steps">
-        <div id="stepRace" class="generation-step"><span>○</span> Razza</div><div id="stepIdentity" class="generation-step"><span>○</span> Identità</div><div id="stepLanguages" class="generation-step"><span>○</span> Lingue</div><div id="stepAppearance" class="generation-step"><span>○</span> Aspetto</div><div id="stepConsistency" class="generation-step"><span>○</span> Coerenza</div><div id="stepComplete" class="generation-step"><span>○</span> Completamento</div>
-    </div>
-    <div id="generationStatus" class="generation-status">L'IA sta preparando il personaggio...</div>
-</div>
-</div>
-
-<script type="module" src="js/character-description.js"></script>
-<script type="module" src="js/app.js"></script>
-<script type="module" src="js/database.js"></script>
-<script type="module" src="js/languages-editor.js"></script>
-<script type="module" src="js/character-sections.js"></script>
+<div id="generationOverlay" class="generation-overlay hidden"><div class="generation-window"><div class="generation-symbol">✦</div><div class="generation-title">CREAZIONE PERSONAGGIO</div><div id="generationName" class="generation-name">Generazione in corso...</div><div class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div id="progressText" class="progress-text">0%</div><div class="generation-steps"><div id="stepRace" class="generation-step"><span>○</span> Razza</div><div id="stepIdentity" class="generation-step"><span>○</span> Identità</div><div id="stepLanguages" class="generation-step"><span>○</span> Lingue</div><div id="stepAppearance" class="generation-step"><span>○</span> Aspetto</div><div id="stepConsistency" class="generation-step"><span>○</span> Coerenza</div><div id="stepComplete" class="generation-step"><span>○</span> Completamento</div></div><div id="generationStatus" class="generation-status">L'IA sta preparando il personaggio...</div></div></div>
+<script type="module" src="js/character-description.js"></script><script type="module" src="js/app.js"></script><script type="module" src="js/database.js"></script><script type="module" src="js/languages-editor.js"></script><script type="module" src="js/character-sections.js"></script>
 </body>
 </html>
