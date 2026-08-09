@@ -1,12 +1,6 @@
 // =========================================================
 // AI RPG - LANGUAGE EDITOR
 // =========================================================
-//
-// Editor delle lingue del personaggio.
-// I dati vengono mantenuti in localStorage e inviati al
-// database quando si preme Salva.
-//
-// =========================================================
 
 const LANGUAGE_STORAGE_KEY = "ai-rpg-character";
 
@@ -23,10 +17,7 @@ function readCharacter() {
 }
 
 function writeCharacter(character) {
-    localStorage.setItem(
-        LANGUAGE_STORAGE_KEY,
-        JSON.stringify(character)
-    );
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, JSON.stringify(character));
 }
 
 function normalizeLevel(value) {
@@ -41,7 +32,6 @@ function levelPercent(value) {
 
 function getLevelLabel(value) {
     const percent = levelPercent(value);
-
     if (percent <= 0) return "Sconosciuta";
     if (percent < 35) return "Conoscenza iniziale";
     if (percent < 55) return "Conoscenza parziale";
@@ -71,6 +61,7 @@ function renderLanguageSelect(languages) {
     languages.forEach(language => {
         const option = document.createElement("option");
         option.value = language.name;
+        option.dataset.languageId = language.id;
         option.textContent = language.name;
         languageSelect.appendChild(option);
     });
@@ -107,16 +98,12 @@ function createLevelControl(language, field, label) {
         const character = readCharacter();
         if (!character) return;
 
-        character.languages = Array.isArray(character.languages)
-            ? character.languages
-            : [];
-
+        character.languages = Array.isArray(character.languages) ? character.languages : [];
         saveCurrentCharacter(character);
     });
 
     row.appendChild(header);
     row.appendChild(slider);
-
     return row;
 }
 
@@ -124,9 +111,7 @@ function renderLanguages() {
     if (!languageList) return;
 
     const character = readCharacter();
-    const languages = character && Array.isArray(character.languages)
-        ? character.languages
-        : [];
+    const languages = character && Array.isArray(character.languages) ? character.languages : [];
 
     languageList.innerHTML = "";
 
@@ -164,12 +149,10 @@ function renderLanguages() {
 
         top.appendChild(name);
         top.appendChild(remove);
-
         item.appendChild(top);
         item.appendChild(createLevelControl(language, "comprehension", "Comprensione"));
         item.appendChild(createLevelControl(language, "speaking", "Parlato"));
         item.appendChild(createLevelControl(language, "writing", "Scrittura"));
-
         languageList.appendChild(item);
     });
 }
@@ -189,8 +172,11 @@ async function loadAvailableLanguages() {
 }
 
 function addSelectedLanguage() {
-    const selectedName = languageSelect?.value?.trim();
-    if (!selectedName) return;
+    const selectedOption = languageSelect?.selectedOptions?.[0];
+    const selectedName = selectedOption?.value?.trim();
+    const selectedId = selectedOption?.dataset?.languageId;
+
+    if (!selectedName || !selectedId) return;
 
     const character = readCharacter();
     if (!character) {
@@ -198,19 +184,17 @@ function addSelectedLanguage() {
         return;
     }
 
-    character.languages = Array.isArray(character.languages)
-        ? character.languages
-        : [];
+    character.languages = Array.isArray(character.languages) ? character.languages : [];
 
     if (character.languages.some(language =>
-        String(language.name).toLowerCase() === selectedName.toLowerCase()
+        String(language.language_id).toLowerCase() === selectedId.toLowerCase()
     )) {
         alert("Questa lingua è già presente nel personaggio.");
         return;
     }
 
     character.languages.push({
-        language_id: selectedName.toLowerCase().replaceAll(" ", "_"),
+        language_id: selectedId,
         name: selectedName,
         comprehension: 0,
         speaking: 0,
