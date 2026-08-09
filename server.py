@@ -6,12 +6,16 @@ import sys
 
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_races import get_available_races
-from app.characters.characters_languages import get_available_languages, get_race_languages
+from app.characters.characters_languages import (
+    CharacterLanguage,
+    get_available_languages,
+    get_language,
+    get_race_languages,
+)
 from app.database.characters_db import (
     init_database,
-    save_identity,
-    update_identity,
-    get_identity,
+    save_character,
+    get_character,
     get_all_identities,
     delete_character,
 )
@@ -49,6 +53,16 @@ def identity_to_dict(identity, character_id=None):
     return result
 
 
+def language_to_dict(language):
+    return {
+        "language_id": language.language_id,
+        "name": language.name,
+        "comprehension": language.comprehension,
+        "speaking": language.speaking,
+        "writing": language.writing,
+    }
+
+
 def identity_from_dict(data):
     if not isinstance(data, dict):
         raise ValueError("I dati del personaggio devono essere un oggetto JSON.")
@@ -70,6 +84,51 @@ def identity_from_dict(data):
     return identity
 
 
+def languages_from_dict(data):
+    if not isinstance(data, list):
+        return []
+
+    result = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+
+        language_id = str(item.get("language_id", "")).strip()
+        language_name = str(item.get("name", "")).strip()
+
+        world_language = get_language(language_name)
+        if world_language is None:
+            raise ValueError(f"Lingua non disponibile: {language_name}")
+
+        if language_id and language_id != world_language.id:
+            raise ValueError(f"ID lingua non valido: {language_id}")
+
+        result.append(CharacterLanguage(
+            language_id=world_language.id,
+            name=world_language.name,
+            comprehension=float(item.get("comprehension", 0.0)),
+            speaking=float(item.get("speaking", 0.0)),
+            writing=float(item.get("writing", 0.0)),
+        ))
+
+    return result
+
+
+def character_to_dict(character):
+    if character is None:
+        return None
+
+    identity = character["identity"]
+    languages = character["languages"]
+
+    return {
+        "id": character["id"],
+        "identity": identity_to_dict(identity, character["id"]),
+        "languages": [language_to_dict(language) for language in languages],
+    }
+
+
 def generate_character():
     races = get_available_races()
     if not races:
@@ -85,16 +144,7 @@ def generate_character():
 
     return {
         "identity": identity_to_dict(identity),
-        "languages": [
-            {
-                "language_id": language.language_id,
-                "name": language.name,
-                "comprehension": language.comprehension,
-                "speaking": language.speaking,
-                "writing": language.writing,
-            }
-            for language in languages
-        ]
+        "languages": [language_to_dict(language) for language in languages],
     }
 
 
@@ -140,26 +190,21 @@ class RPGServer(BaseHTTPRequestHandler):
 
             if request_path.startswith("/api/characters/"):
                 character_id = int(request_path.rsplit("/", 1)[1])
-                identity = get_identity(character_id)
-                if identity is None:
+                character = get_character(character_id)
+
+                if character is None:
                     json_response(self, {"error": "Personaggio non trovato."}, 404)
                     return
 
-                languages = get_race_languages(identity.race)
-                json_response(self, {
-                    "id": character_id,
-                    "identity": identity_to_dict(identity, character_id),
-                    "languages": [
-                        {
-                            "language_id": language.language_id,
-                            "name": language.name,
-                            "comprehension": language.comprehension,
-                            "speaking": language.speaking,
-                            "writing": language.writing,
-                        }
-                        for language in languages
-                    ]
-                })
+                languages = character["languages"]
+
+                # Compatibilità con i personaggi creati prima della
+                # persistenza delle lingue.
+                if not languages:
+                    languages = get_race_languages(character["identity"].race)
+
+                character["languages"] = languages
+                json_response(self, character_to_dict(character))
                 return
 
             self.serve_frontend()
@@ -182,20 +227,30 @@ class RPGServer(BaseHTTPRequestHandler):
                 data = self.read_json()
                 identity_data = data.get("identity", data)
                 character_id = data.get("id")
+
                 identity = identity_from_dict(identity_data)
+                languages = languages_from_dict(data.get("languages", []))
+
+                if not languages:
+                    languages = get_race_languages(identity.race)
 
                 if character_id is None or str(character_id).strip() == "":
-                    character_id = save_identity(identity)
+                    character_id = save_character(identity, languages)
                     print(f"[DATABASE] Personaggio creato: ID {character_id}")
                 else:
                     character_id = int(character_id)
-                    update_identity(character_id, identity)
+                    character_id = save_character(
+                        identity,
+                        languages,
+                        character_id=character_id,
+                    )
                     print(f"[DATABASE] Personaggio aggiornato: ID {character_id}")
 
                 json_response(self, {
                     "success": True,
                     "id": character_id,
                     "identity": identity_to_dict(identity, character_id),
+                    "languages": [language_to_dict(language) for language in languages],
                 })
                 return
 
@@ -207,13 +262,7 @@ class RPGServer(BaseHTTPRequestHandler):
                     return
 
                 json_response(self, [
-                    {
-                        "language_id": language.language_id,
-                        "name": language.name,
-                        "comprehension": language.comprehension,
-                        "speaking": language.speaking,
-                        "writing": language.writing,
-                    }
+                    language_to_dict(language)
                     for language in get_race_languages(race)
                 ])
                 return
