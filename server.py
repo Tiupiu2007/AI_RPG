@@ -5,6 +5,7 @@ import random
 import sys
 
 from app.characters.characters_identity import CharacterIdentity, generate_identity
+from app.characters.characters_profile import generate_character_profile, profile_to_dict
 from app.characters.characters_races import get_available_races
 from app.characters.characters_languages import (
     CharacterLanguage,
@@ -96,8 +97,8 @@ def languages_from_dict(data):
 
         language_id = str(item.get("language_id", "")).strip()
         language_name = str(item.get("name", "")).strip()
-
         world_language = get_language(language_name)
+
         if world_language is None:
             raise ValueError(f"Lingua non disponibile: {language_name}")
 
@@ -119,13 +120,10 @@ def character_to_dict(character):
     if character is None:
         return None
 
-    identity = character["identity"]
-    languages = character["languages"]
-
     return {
         "id": character["id"],
-        "identity": identity_to_dict(identity, character["id"]),
-        "languages": [language_to_dict(language) for language in languages],
+        "identity": identity_to_dict(character["identity"], character["id"]),
+        "languages": [language_to_dict(language) for language in character["languages"]],
     }
 
 
@@ -134,17 +132,40 @@ def generate_character():
     if not races:
         raise ValueError("Non sono presenti razze disponibili.")
 
+    # La scelta della razza è deterministica lato codice: l'IA non deve
+    # spendere una chiamata per una decisione che il catalogo può gestire.
     weights = [max(0.0, float(race.rarity)) for race in races]
     if not any(weights):
         weights = None
 
     race = random.choices(races, weights=weights, k=1)[0]
+
+    # IA: identità, fisico, aspetto, psicologia e personalità.
     identity = generate_identity(race.name)
+    profile = generate_character_profile(identity_to_dict(identity))
+
+    # Codice: lingue legate alla razza. Non serve usare l'IA.
     languages = get_race_languages(race.name)
 
     return {
         "identity": identity_to_dict(identity),
         "languages": [language_to_dict(language) for language in languages],
+        "psychology": {
+            key: value
+            for key, value in profile_to_dict(profile).items()
+            if key in {
+                "mental_state", "emotional_stability", "fears",
+                "desires", "values", "traumas"
+            }
+        },
+        "personality": {
+            key: value
+            for key, value in profile_to_dict(profile).items()
+            if key in {
+                "personality_description", "traits", "strengths",
+                "flaws", "habits", "social_behavior"
+            }
+        },
     }
 
 
@@ -197,9 +218,6 @@ class RPGServer(BaseHTTPRequestHandler):
                     return
 
                 languages = character["languages"]
-
-                # Compatibilità con i personaggi creati prima della
-                # persistenza delle lingue.
                 if not languages:
                     languages = get_race_languages(character["identity"].race)
 
@@ -239,11 +257,7 @@ class RPGServer(BaseHTTPRequestHandler):
                     print(f"[DATABASE] Personaggio creato: ID {character_id}")
                 else:
                     character_id = int(character_id)
-                    character_id = save_character(
-                        identity,
-                        languages,
-                        character_id=character_id,
-                    )
+                    character_id = save_character(identity, languages, character_id=character_id)
                     print(f"[DATABASE] Personaggio aggiornato: ID {character_id}")
 
                 json_response(self, {
@@ -261,10 +275,7 @@ class RPGServer(BaseHTTPRequestHandler):
                     json_response(self, {"error": "Razza non specificata."}, 400)
                     return
 
-                json_response(self, [
-                    language_to_dict(language)
-                    for language in get_race_languages(race)
-                ])
+                json_response(self, [language_to_dict(language) for language in get_race_languages(race)])
                 return
 
             json_response(self, {"error": "Endpoint non trovato."}, 404)
