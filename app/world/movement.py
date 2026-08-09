@@ -12,13 +12,12 @@ from .world_state import WorldState
 
 @dataclass(frozen=True)
 class MovementResult:
-    """Result of a completed movement between two locations."""
-
     actor_id: str
     origin_id: str
     destination_id: str
     route_ids: tuple[str, ...]
     location_ids: tuple[str, ...]
+    biome_sequence: tuple[str | None, ...]
     total_distance: float
     base_speed: float
     terrain_modifier: float
@@ -38,6 +37,7 @@ class MovementResult:
             "destination_id": self.destination_id,
             "route_ids": list(self.route_ids),
             "location_ids": list(self.location_ids),
+            "biome_sequence": list(self.biome_sequence),
             "total_distance": self.total_distance,
             "base_speed": self.base_speed,
             "terrain_modifier": self.terrain_modifier,
@@ -68,23 +68,16 @@ class MovementEngine:
         difficulty_modifier: float = 1.0,
         prefer: str = "distance",
     ) -> MovementResult:
-        """Move an existing actor from its persisted location to a destination.
-
-        The engine derives the origin from WorldState. Callers cannot silently
-        teleport an actor by supplying a different origin.
-        """
         if not isinstance(actor_id, str) or not actor_id.strip():
             raise ValueError("actor_id non valido.")
         if not isinstance(destination_id, str) or not destination_id.strip():
             raise ValueError("destination_id non valido.")
-
         _positive_number(base_speed, "La velocità base")
         _positive_number(terrain_modifier, "Il modificatore del terreno")
         _positive_number(difficulty_modifier, "Il modificatore della difficoltà")
 
         position = self.world.require_actor_position(actor_id)
         origin_id = position.location_id
-
         if origin_id == destination_id:
             raise ValueError("L'attore si trova già nella destinazione.")
         if position.is_traveling:
@@ -98,11 +91,9 @@ class MovementEngine:
         if any(route is None for route in routes):
             raise RuntimeError("Il percorso contiene una rotta non più presente nel mondo.")
 
+        biome_sequence = self._path_biomes(path)
         effective_speed = float(base_speed) * float(terrain_modifier) * float(difficulty_modifier)
-        travel_hours = sum(
-            route.distance * max(route.difficulty, 0.000001) / effective_speed
-            for route in routes
-        )
+        travel_hours = sum(route.distance * max(route.difficulty, 0.000001) / effective_speed for route in routes)
         travel_minutes = max(1, int(round(travel_hours * 60)))
 
         started_at = self.world.clock.current_time
@@ -116,6 +107,7 @@ class MovementEngine:
             destination_id=destination_id,
             route_ids=path.route_ids,
             location_ids=path.location_ids,
+            biome_sequence=tuple(biome_sequence),
             total_distance=path.total_distance,
             base_speed=float(base_speed),
             terrain_modifier=float(terrain_modifier),
@@ -125,13 +117,18 @@ class MovementEngine:
             arrived_at=arrived_at,
         )
 
+    def _path_biomes(self, path: PathResult) -> list[str | None]:
+        result: list[str | None] = []
+        for first_id, second_id in zip(path.location_ids, path.location_ids[1:]):
+            transition = self.world.biomes_between_locations(first_id, second_id)
+            for biome in transition:
+                if not result or result[-1] != biome:
+                    result.append(biome)
+        return result
+
     def available_destinations(self, actor_id: str) -> list[str]:
-        """Return locations directly reachable from the actor's current position."""
         position = self.world.require_actor_position(actor_id)
-        return [
-            route.destination_id
-            for route in self.world.routes_from(position.location_id, available_only=True)
-        ]
+        return [route.destination_id for route in self.world.routes_from(position.location_id, available_only=True)]
 
 
 def _positive_number(value: float, label: str) -> None:
