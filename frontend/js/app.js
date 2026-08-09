@@ -1,8 +1,8 @@
 // =========================================================
 // AI RPG - CHARACTER EDITOR
 // =========================================================
-// Orchestratore principale: collega i moduli senza contenere
-// la logica dettagliata di stato, API, generazione o UI.
+// Entry point: coordina i moduli senza contenere la logica
+// dettagliata di stato, API, generazione o componenti UI.
 // =========================================================
 
 import {
@@ -12,30 +12,14 @@ import {
     clearLocalCharacter
 } from "./character-state.js";
 
-import {
-    loadWorldData,
-    getRaceLanguages
-} from "./character-api.js";
-
-import {
-    PROFILE_FIELDS,
-    loadProfileIntoUI,
-    updateProfileFromUI,
-    bindProfileInputs
-} from "./profile.js";
-
-import {
-    initializeNavigation,
-    activateSection,
-    updateCharacterTitle
-} from "./character-ui.js";
-
+import { loadWorldData, getRaceLanguages } from "./character-api.js";
+import { loadProfileIntoUI, updateProfileFromUI, bindProfileInputs } from "./profile.js";
+import { initializeNavigation, activateSection, updateCharacterTitle } from "./character-ui.js";
 import { generateCharacter } from "./character-generation.js";
 import { updateSummary } from "./character-summary.js";
 
 let character = null;
 let availableRaces = [];
-let availableLanguages = [];
 
 const inputs = {
     name: document.getElementById("name"),
@@ -51,8 +35,7 @@ const inputs = {
 
 function findRace(name) {
     return availableRaces.find(race =>
-        String(race.name).trim().toLowerCase() ===
-        String(name || "").trim().toLowerCase()
+        String(race.name).trim().toLowerCase() === String(name || "").trim().toLowerCase()
     ) || null;
 }
 
@@ -147,10 +130,7 @@ function updateCharacterFromUI() {
 }
 
 function initializeInputListeners() {
-    Object.values(inputs).forEach(input => {
-        input?.addEventListener("input", updateCharacterFromUI);
-    });
-
+    Object.values(inputs).forEach(input => input?.addEventListener("input", updateCharacterFromUI));
     bindProfileInputs(updateCharacterFromUI);
 }
 
@@ -163,12 +143,6 @@ function newCharacter() {
     activateSection("identity");
 }
 
-function saveCharacter() {
-    // database.js gestisce il salvataggio definitivo nel database.
-    // Qui aggiorniamo soltanto lo stato locale prima del suo handler.
-    updateCharacterFromUI();
-}
-
 function onGenerated(generated) {
     character = generated;
     loadCharacterIntoUI();
@@ -178,7 +152,6 @@ async function initializeApp() {
     try {
         const world = await loadWorldData();
         availableRaces = world.races;
-        availableLanguages = world.languages;
 
         initializeNavigation();
         initializeRaceSelector();
@@ -188,12 +161,11 @@ async function initializeApp() {
             try {
                 await generateCharacter(onGenerated);
             } catch {
-                // L'errore viene già mostrato dal modulo di generazione.
+                // L'errore viene già gestito dal modulo di generazione.
             }
         });
 
         document.getElementById("newCharacterButton")?.addEventListener("click", newCharacter);
-        document.getElementById("saveButton")?.addEventListener("click", saveCharacter);
 
         character = loadLocalCharacter();
         loadCharacterIntoUI();
@@ -202,8 +174,5 @@ async function initializeApp() {
         alert(`Impossibile avviare l'interfaccia.\n\n${error.message}`);
     }
 }
-
-void PROFILE_FIELDS;
-void availableLanguages;
 
 initializeApp();
