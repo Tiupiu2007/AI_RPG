@@ -41,8 +41,16 @@ export async function generateCharacter(onGenerated, options = {}) {
         setProgress(78, "Psicologia, personalità, abilità e skill...");
 
         const character = normalizeCharacter(generated);
-        onGenerated(character);
+
+        // Salva subito il nuovo personaggio nello storage prima di aggiornare
+        // i moduli secondari. In questo modo il riepilogo/profilo legge già
+        // il personaggio appena generato e non quello precedente.
         saveLocalCharacter(character);
+        onGenerated(character);
+        window.dispatchEvent(new CustomEvent("ai-rpg-character-changed", {
+            detail: character
+        }));
+
         await wait(150);
         setGenerationStep("stepConsistency", "completed");
         setGenerationStep("stepComplete", "active");
@@ -51,6 +59,10 @@ export async function generateCharacter(onGenerated, options = {}) {
         const saved = await saveCharacterToAPI(character);
         if (saved?.id) character.id = saved.id;
         saveLocalCharacter(character);
+
+        window.dispatchEvent(new CustomEvent("ai-rpg-character-changed", {
+            detail: character
+        }));
 
         setGenerationStep("stepComplete", "completed");
         setProgress(100, "Personaggio completato e salvato.");
