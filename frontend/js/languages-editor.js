@@ -20,6 +20,20 @@ function writeCharacter(character) {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, JSON.stringify(character));
 }
 
+// Salva senza ricreare la GUI.
+// Gli slider devono rimanere lo stesso elemento mentre vengono trascinati.
+function persistCharacter(character) {
+    if (!character) return;
+    writeCharacter(character);
+}
+
+// Salva e notifica gli altri componenti dell'interfaccia.
+function saveCurrentCharacter(character) {
+    if (!character) return;
+    writeCharacter(character);
+    window.dispatchEvent(new CustomEvent("ai-rpg-character-changed"));
+}
+
 function normalizeLevel(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return 0;
@@ -38,12 +52,6 @@ function getLevelLabel(value) {
     if (percent < 75) return "Buona conoscenza";
     if (percent < 95) return "Molto buona";
     return "Fluente";
-}
-
-function saveCurrentCharacter(character) {
-    if (!character) return;
-    writeCharacter(character);
-    window.dispatchEvent(new CustomEvent("ai-rpg-character-changed"));
 }
 
 function renderLanguageSelect(languages) {
@@ -79,7 +87,13 @@ function createLevelControl(language, field, label) {
 
     const value = document.createElement("span");
     value.className = "language-editor-level-value";
-    value.textContent = `${levelPercent(language[field])}% · ${getLevelLabel(language[field])}`;
+
+    function updateValue() {
+        const percent = levelPercent(language[field]);
+        value.textContent = `${percent}% · ${getLevelLabel(language[field])}`;
+    }
+
+    updateValue();
 
     header.appendChild(title);
     header.appendChild(value);
@@ -93,17 +107,32 @@ function createLevelControl(language, field, label) {
 
     slider.addEventListener("input", () => {
         language[field] = Number(slider.value) / 100;
-        value.textContent = `${slider.value}% · ${getLevelLabel(language[field])}`;
+        updateValue();
 
         const character = readCharacter();
         if (!character) return;
 
-        character.languages = Array.isArray(character.languages) ? character.languages : [];
-        saveCurrentCharacter(character);
+        character.languages = Array.isArray(character.languages)
+            ? character.languages
+            : [];
+
+        const currentLanguage = character.languages.find(item =>
+            String(item.language_id).toLowerCase() ===
+            String(language.language_id).toLowerCase()
+        );
+
+        if (currentLanguage) {
+            currentLanguage[field] = language[field];
+        }
+
+        // NON chiamare saveCurrentCharacter() qui.
+        // Quello emette l'evento che ricrea tutti gli slider ad ogni movimento.
+        persistCharacter(character);
     });
 
     row.appendChild(header);
     row.appendChild(slider);
+
     return row;
 }
 
@@ -111,7 +140,9 @@ function renderLanguages() {
     if (!languageList) return;
 
     const character = readCharacter();
-    const languages = character && Array.isArray(character.languages) ? character.languages : [];
+    const languages = character && Array.isArray(character.languages)
+        ? character.languages
+        : [];
 
     languageList.innerHTML = "";
 
@@ -184,7 +215,9 @@ function addSelectedLanguage() {
         return;
     }
 
-    character.languages = Array.isArray(character.languages) ? character.languages : [];
+    character.languages = Array.isArray(character.languages)
+        ? character.languages
+        : [];
 
     if (character.languages.some(language =>
         String(language.language_id).toLowerCase() === selectedId.toLowerCase()
