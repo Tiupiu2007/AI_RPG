@@ -65,7 +65,6 @@ def generate_character():
     if not races:
         raise ValueError("Non sono presenti razze disponibili.")
 
-    # La rarità viene usata come peso per la scelta automatica.
     weights = [max(0.0, float(race.rarity)) for race in races]
 
     if not any(weights):
@@ -129,7 +128,9 @@ class RPGServer(BaseHTTPRequestHandler):
 
         try:
 
-            if self.path == "/api/races":
+            request_path = self.path.split("?", 1)[0].rstrip("/") or "/"
+
+            if request_path == "/api/races":
 
                 races = []
 
@@ -147,7 +148,7 @@ class RPGServer(BaseHTTPRequestHandler):
                 json_response(self, races)
                 return
 
-            if self.path == "/api/languages":
+            if request_path == "/api/languages":
 
                 languages = []
 
@@ -181,11 +182,15 @@ class RPGServer(BaseHTTPRequestHandler):
 
         try:
 
+            # Normalizziamo il percorso per accettare anche
+            # eventuale query string o slash finale.
+            request_path = self.path.split("?", 1)[0].rstrip("/")
+
             # =================================================
             # GENERAZIONE PERSONAGGIO
             # =================================================
 
-            if self.path == "/api/generate-character":
+            if request_path == "/api/generate-character":
 
                 generated = generate_character()
                 json_response(self, generated)
@@ -195,7 +200,7 @@ class RPGServer(BaseHTTPRequestHandler):
             # LINGUE DELLA RAZZA
             # =================================================
 
-            if self.path == "/api/race-languages":
+            if request_path == "/api/race-languages":
 
                 data = self.read_json()
                 race = data.get("race")
