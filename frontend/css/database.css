@@ -1,0 +1,9 @@
+.character-list-title { margin-top: 28px; }
+.character-list { display:flex; flex-direction:column; gap:5px; max-height:220px; overflow-y:auto; margin-bottom:12px; }
+.character-list-empty { color:#666971; font-size:12px; padding:8px 4px; }
+.character-entry { display:flex; align-items:center; gap:5px; }
+.character-load { flex:1; min-width:0; border:0; background:#1e2026; color:#d8d9dd; padding:9px 10px; border-radius:6px; text-align:left; cursor:pointer; font-family:inherit; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.character-load:hover { background:#292b32; color:#fff; }
+.character-load.current { background:#30323a; color:#fff; }
+.character-delete { width:30px; height:30px; border:0; border-radius:6px; background:transparent; color:#777a83; cursor:pointer; font-size:17px; }
+.character-delete:hover { background:#352326; color:#fff; }
