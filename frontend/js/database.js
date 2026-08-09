@@ -39,9 +39,7 @@ async function saveCharacterToDatabase() {
         }
 
         character.id = data.id;
-        if (data.identity) {
-            character.identity = { ...character.identity, ...data.identity };
-        }
+        if (data.identity) character.identity = { ...character.identity, ...data.identity };
         setLocalCharacter(character);
         await loadCharacterList();
         alert(`Personaggio salvato. ID: ${character.id}`);
@@ -74,15 +72,12 @@ async function loadCharacterList() {
         characters.forEach(entry => {
             const identity = entry.identity || {};
             const fullName = `${identity.name || "Senza nome"} ${identity.surname || ""}`.trim();
-
             const row = document.createElement("div");
             row.className = "character-entry";
 
             const loadButton = document.createElement("button");
             loadButton.className = "character-load";
-            if (current && Number(current.id) === Number(entry.id)) {
-                loadButton.classList.add("current");
-            }
+            if (current && Number(current.id) === Number(entry.id)) loadButton.classList.add("current");
             loadButton.textContent = fullName || `Personaggio #${entry.id}`;
             loadButton.title = `ID ${entry.id}`;
             loadButton.addEventListener("click", () => loadCharacterFromDatabase(entry.id));
@@ -96,8 +91,7 @@ async function loadCharacterList() {
                 deleteCharacterFromDatabase(entry.id, fullName);
             });
 
-            row.appendChild(loadButton);
-            row.appendChild(deleteButton);
+            row.append(loadButton, deleteButton);
             characterList.appendChild(row);
         });
     } catch (error) {
@@ -115,7 +109,6 @@ async function loadCharacterFromDatabase(characterId) {
         const response = await fetch(`/api/characters/${characterId}`);
         const character = await response.json();
         if (!response.ok) throw new Error(character.error || "Personaggio non trovato.");
-
         setLocalCharacter(character);
         window.location.reload();
     } catch (error) {
@@ -145,7 +138,7 @@ async function deleteCharacterFromDatabase(characterId, name) {
     }
 }
 
-// Il database.js intercetta il click prima del vecchio handler di app.js.
+// Il salvataggio definitivo resta centralizzato nel modulo database.
 if (saveButton) {
     saveButton.addEventListener("click", event => {
         event.preventDefault();
@@ -153,19 +146,5 @@ if (saveButton) {
         saveCharacterToDatabase();
     }, true);
 }
-
-const style = document.createElement("style");
-style.textContent = `
-.character-list-title { margin-top: 28px; }
-.character-list { display:flex; flex-direction:column; gap:5px; max-height:220px; overflow-y:auto; margin-bottom:12px; }
-.character-list-empty { color:#666971; font-size:12px; padding:8px 4px; }
-.character-entry { display:flex; align-items:center; gap:5px; }
-.character-load { flex:1; min-width:0; border:0; background:#1e2026; color:#d8d9dd; padding:9px 10px; border-radius:6px; text-align:left; cursor:pointer; font-family:inherit; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.character-load:hover { background:#292b32; color:#fff; }
-.character-load.current { background:#30323a; color:#fff; }
-.character-delete { width:30px; height:30px; border:0; border-radius:6px; background:transparent; color:#777a83; cursor:pointer; font-size:17px; }
-.character-delete:hover { background:#352326; color:#fff; }
-`;
-document.head.appendChild(style);
 
 loadCharacterList();
