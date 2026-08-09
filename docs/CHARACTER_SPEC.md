@@ -25,6 +25,7 @@ La generazione deve usare codice per i dati deterministici/regolati e IA solo do
 - Background: storia personale e origine.
 - Social Status: posizione sociale, reputazione e status.
 - Inventory: equipaggiamento e oggetti posseduti.
+- Money: denaro e valute possedute.
 
 ## Inventario
 L'inventario deve distinguere almeno:
@@ -48,10 +49,28 @@ Ogni elemento di armatura può avere:
 
 La protezione non deve essere necessariamente un singolo valore: il sistema può supportare protezioni diverse quando servono, mantenendo comunque una struttura libera.
 
+### Oggetti e armi
+Gli oggetti non devono avere tutti gli stessi campi. In base alla natura dell'oggetto possono essere presenti quantità, peso, valore, condizioni, proprietà, effetti, origine e altri dati pertinenti.
+
+## Denaro
+Il personaggio può possedere più valute contemporaneamente. Il modello non assume una singola moneta universale.
+
+Esempio:
+
+```text
+money
+- oro
+- argento
+- rame
+- altre valute
+```
+
+Il motore gestisce aggiunta e rimozione del denaro e deve impedire saldi negativi quando non esiste una regola esplicita che lo consenta. Eventuali tassi di cambio appartengono al sistema economico del mondo, non al modello del personaggio.
+
 ## Magia
 Il personaggio possiede una sezione persistente per tutte le magie imparate. Le magie sono organizzate per categorie/scuole, ma la struttura deve rimanere estendibile.
 
-Esempio:
+Categorie iniziali:
 - Fuoco
 - Acqua
 - Aria/Vento
@@ -96,9 +115,12 @@ Ogni magia può contenere, quando rilevante:
 Non tutte le magie devono avere tutti i campi: la struttura è volutamente flessibile.
 
 ## Generazione
-Premendo "Genera personaggio", il sistema deve produrre e salvare l'intero personaggio coerentemente con razza, background, statistiche, livello, abilità, inventario, magie, personalità e resto dei dati pertinenti.
+Premendo "Genera personaggio", il sistema deve produrre e salvare l'intero personaggio coerentemente con razza, background, statistiche, livello, abilità, inventario, magie, denaro, personalità e resto dei dati pertinenti.
 
 Una breve descrizione fornita dall'utente può guidare la generazione. Anche l'IA durante la storia potrà proporre/generare personaggi a partire da una descrizione, ma il risultato deve passare dalle regole del game engine prima del salvataggio.
 
+## Persistenza
+Inventario, denaro e magie apprese devono essere persistenti. Ogni modifica valida deve poter essere salvata e recuperata insieme al personaggio senza perdere i dati già esistenti.
+
 ## Regola fondamentale
-Il personaggio deve essere coerente ma non omogeneo: statistiche, abilità, equipaggiamento e magie devono riflettere storia, razza, esperienza, professione, personalità e circostanze. Non tutti i personaggi devono avere gli stessi valori o lo stesso insieme di capacità.
+Il personaggio deve essere coerente ma non omogeneo: statistiche, abilità, equipaggiamento, denaro e magie devono riflettere storia, razza, esperienza, professione, personalità e circostanze. Non tutti i personaggi devono avere gli stessi valori o lo stesso insieme di capacità.
