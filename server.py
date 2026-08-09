@@ -4,7 +4,10 @@ import json
 import random
 import sys
 
-from app.characters.characters_identity import generate_identity
+from app.characters.characters_identity import (
+    CharacterIdentity,
+    generate_identity,
+)
 
 from app.characters.characters_races import (
     get_available_races,
@@ -13,6 +16,13 @@ from app.characters.characters_races import (
 from app.characters.characters_languages import (
     get_available_languages,
     get_race_languages,
+)
+
+from app.database.characters_db import (
+    init_database,
+    save_identity,
+    update_identity,
+    get_identity,
 )
 
 # =========================================================
@@ -55,6 +65,65 @@ def json_response(handler, data, status=200):
 
 
 # =========================================================
+# CONVERSIONE IDENTITÀ
+# =========================================================
+
+def identity_to_dict(identity, character_id=None):
+
+    result = {
+        "name": identity.name,
+        "surname": identity.surname,
+        "nickname": identity.nickname,
+        "age": identity.age,
+        "birth_date": identity.birth_date,
+        "sex": identity.sex,
+        "race": identity.race,
+        "physical_description": identity.physical_description,
+        "appearance": identity.appearance,
+    }
+
+    if character_id is not None:
+        result["id"] = character_id
+
+    return result
+
+
+def identity_from_dict(data):
+
+    if not isinstance(data, dict):
+        raise ValueError("I dati del personaggio devono essere un oggetto JSON.")
+
+    identity = CharacterIdentity(
+        name=str(data.get("name", "")).strip(),
+        surname=str(data.get("surname", "")).strip(),
+        nickname=str(data.get("nickname", "")).strip(),
+        age=int(data.get("age", 0)),
+        birth_date=str(data.get("birth_date", "")).strip(),
+        sex=str(data.get("sex", "")).strip(),
+        race=str(data.get("race", "")).strip(),
+        physical_description=str(data.get("physical_description", "")).strip(),
+        appearance=str(data.get("appearance", "")).strip(),
+    )
+
+    # La stessa validazione usata dalla generazione AI.
+    from app.characters.characters_identity import validate_identity
+
+    validate_identity({
+        "name": identity.name,
+        "surname": identity.surname,
+        "nickname": identity.nickname,
+        "age": identity.age,
+        "birth_date": identity.birth_date,
+        "sex": identity.sex,
+        "race": identity.race,
+        "physical_description": identity.physical_description,
+        "appearance": identity.appearance,
+    })
+
+    return identity
+
+
+# =========================================================
 # GENERAZIONE PERSONAGGIO
 # =========================================================
 
@@ -85,17 +154,7 @@ def generate_character():
     )
 
     return {
-        "identity": {
-            "name": identity.name,
-            "surname": identity.surname,
-            "nickname": identity.nickname,
-            "age": identity.age,
-            "birth_date": identity.birth_date,
-            "sex": identity.sex,
-            "race": identity.race,
-            "physical_description": identity.physical_description,
-            "appearance": identity.appearance,
-        },
+        "identity": identity_to_dict(identity),
         "languages": [
             {
                 "language_id": language.language_id,
@@ -182,8 +241,6 @@ class RPGServer(BaseHTTPRequestHandler):
 
         try:
 
-            # Normalizziamo il percorso per accettare anche
-            # eventuale query string o slash finale.
             request_path = self.path.split("?", 1)[0].rstrip("/")
 
             # =================================================
@@ -194,6 +251,36 @@ class RPGServer(BaseHTTPRequestHandler):
 
                 generated = generate_character()
                 json_response(self, generated)
+                return
+
+            # =================================================
+            # SALVATAGGIO PERSONAGGIO
+            # =================================================
+
+            if request_path == "/api/characters":
+
+                data = self.read_json()
+                identity_data = data.get("identity", data)
+                character_id = data.get("id")
+
+                identity = identity_from_dict(identity_data)
+
+                if character_id is None or str(character_id).strip() == "":
+                    character_id = save_identity(identity)
+                    print(f"[DATABASE] Personaggio creato: ID {character_id}")
+                else:
+                    character_id = int(character_id)
+                    update_identity(character_id, identity)
+                    print(f"[DATABASE] Personaggio aggiornato: ID {character_id}")
+
+                json_response(
+                    self,
+                    {
+                        "success": True,
+                        "id": character_id,
+                        "identity": identity_to_dict(identity, character_id),
+                    }
+                )
                 return
 
             # =================================================
@@ -336,6 +423,9 @@ def main():
         )
         sys.exit(1)
 
+    # Crea automaticamente data/characters.db e la tabella characters.
+    init_database()
+
     server = HTTPServer(
         (HOST, PORT),
         RPGServer
@@ -348,6 +438,7 @@ def main():
     print()
     print(f"Server: http://{HOST}:{PORT}")
     print(f"Frontend: {FRONTEND_DIR}")
+    print("Database: data/characters.db")
     print()
     print("Premi CTRL+C per fermare il server.")
     print()
