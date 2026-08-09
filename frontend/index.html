@@ -24,40 +24,21 @@
             <button class="nav-button disabled" data-section="conditions"><span class="nav-number">08</span>Stato</button>
             <button class="nav-button disabled" data-section="relationships"><span class="nav-number">09</span>Relazioni</button>
         </nav>
-
         <div class="sidebar-title character-list-title">PERSONAGGI SALVATI</div>
         <div id="characterList" class="character-list"><div class="character-list-empty">Nessun personaggio salvato.</div></div>
-
         <div class="sidebar-bottom">
             <button id="newCharacterButton" class="secondary-button">Nuovo personaggio</button>
             <button id="generateButton" class="primary-button">✦ Genera personaggio</button>
         </div>
     </aside>
-
     <main class="main">
-        <header class="topbar">
-            <div>
-                <div class="page-label">CHARACTER EDITOR</div>
-                <h1 id="characterTitle">Nuovo personaggio</h1>
-            </div>
-            <button id="saveButton" class="save-button">Salva</button>
-        </header>
-
+        <header class="topbar"><div><div class="page-label">CHARACTER EDITOR</div><h1 id="characterTitle">Nuovo personaggio</h1></div><button id="saveButton" class="save-button">Salva</button></header>
         <section id="content" class="content">
             <div id="identitySection" class="section">
                 <div class="section-header"><div><span class="section-number">01</span><h2>Identità</h2><p>Informazioni fondamentali del personaggio.</p></div></div>
-                <div class="card">
-                    <div class="card-title">Informazioni personali</div>
-                    <div class="form-grid">
-                        <div class="field"><label for="name">Nome</label><input id="name" type="text" placeholder="Nome"></div>
-                        <div class="field"><label for="surname">Cognome</label><input id="surname" type="text" placeholder="Cognome"></div>
-                        <div class="field"><label for="nickname">Soprannome</label><input id="nickname" type="text" placeholder="Nessun soprannome"></div>
-                        <div class="field"><label for="age">Età</label><input id="age" type="number" min="0" max="999" placeholder="Età"></div>
-                        <div class="field"><label for="birthDate">Data di nascita</label><input id="birthDate" type="text" placeholder="DD-MM-YYYY"></div>
-                        <div class="field"><label for="sex">Sesso</label><input id="sex" type="text" placeholder="Sesso"></div>
-                        <div class="field field-wide"><label for="race">Razza</label><select id="race"><option value="">Seleziona razza</option></select></div>
-                    </div>
-                </div>
+                <div class="card"><div class="card-title">Informazioni personali</div><div class="form-grid">
+                    <div class="field"><label for="name">Nome</label><input id="name" type="text" placeholder="Nome"></div><div class="field"><label for="surname">Cognome</label><input id="surname" type="text" placeholder="Cognome"></div><div class="field"><label for="nickname">Soprannome</label><input id="nickname" type="text" placeholder="Nessun soprannome"></div><div class="field"><label for="age">Età</label><input id="age" type="number" min="0" max="999" placeholder="Età"></div><div class="field"><label for="birthDate">Data di nascita</label><input id="birthDate" type="text" placeholder="DD-MM-YYYY"></div><div class="field"><label for="sex">Sesso</label><input id="sex" type="text" placeholder="Sesso"></div><div class="field field-wide"><label for="race">Razza</label><select id="race"><option value="">Seleziona razza</option></select></div>
+                </div></div>
                 <div class="card"><div class="card-title">Descrizione fisica</div><p class="card-description">Costituzione, struttura corporea, lineamenti e caratteristiche fisiche del personaggio.</p><textarea id="physicalDescription" placeholder="Descrizione della costituzione fisica..."></textarea></div>
                 <div class="card"><div class="card-title">Aspetto</div><p class="card-description">Aspetto esteriore, capelli, occhi, pelle, abbigliamento e segni distintivi.</p><textarea id="appearance" placeholder="Descrizione dell'aspetto esteriore..."></textarea></div>
             </div>
@@ -95,10 +76,7 @@
         </section>
     </main>
 </div>
-
 <div id="generationOverlay" class="generation-overlay hidden"><div class="generation-window"><div class="generation-symbol">✦</div><div class="generation-title">CREAZIONE PERSONAGGIO</div><div id="generationName" class="generation-name">Generazione in corso...</div><div class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div id="progressText" class="progress-text">0%</div><div class="generation-steps"><div id="stepRace" class="generation-step"><span>○</span> Razza</div><div id="stepIdentity" class="generation-step"><span>○</span> Identità</div><div id="stepLanguages" class="generation-step"><span>○</span> Lingue</div><div id="stepAppearance" class="generation-step"><span>○</span> Aspetto</div><div id="stepConsistency" class="generation-step"><span>○</span> Coerenza</div><div id="stepComplete" class="generation-step"><span>○</span> Completamento</div></div><div id="generationStatus" class="generation-status">L'IA sta preparando il personaggio...</div></div></div>
-<script type="module" src="js/app.js"></script>
-<script type="module" src="js/database.js"></script>
-<script type="module" src="js/languages-editor.js"></script>
+<script type="module" src="js/app.js"></script><script type="module" src="js/database.js"></script><script type="module" src="js/languages-editor.js"></script><script type="module" src="js/character-profile.js"></script>
 </body>
 </html>
