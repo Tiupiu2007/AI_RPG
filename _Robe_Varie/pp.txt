@@ -1,0 +1,256 @@
+1. Identità
+Nome
+Cognome
+Soprannome
+Età
+Data di nascita
+Sesso
+Razza
+Altezza
+Peso
+Descrizione fisica
+Aspetto
+Voce
+2. Statistiche principali
+
+Le statistiche che abbiamo già scelto:
+
+Forza
+Costituzione
+Agilità
+Velocità
+Intelligenza
+Percezione
+Volontà
+Carisma
+Fortuna
+Controllo
+3. Statistiche derivate
+
+Calcolate dalle statistiche principali:
+
+Salute massima
+Stamina massima
+Mana massimo
+Attacco fisico
+Difesa fisica
+Attacco magico
+Difesa magica
+Precisione
+Evasione
+Iniziativa
+Velocità di movimento
+4. Stato attuale
+
+Quello che cambia durante il gioco:
+
+Salute attuale
+Stamina attuale
+Mana attuale
+Fame
+Sete
+Fatica
+Vivo/morto
+Cosciente/incosciente
+Condizioni
+5. Condizioni
+
+Per esempio:
+
+Ferito
+Sanguinante
+Avvelenato
+Bruciato
+Stordito
+Esausto
+Malato
+Incosciente
+
+Ogni condizione può avere:
+
+Tipo
+Intensità
+Durata
+Effetto
+6. Abilità
+
+Questa secondo me deve essere una delle parti più importanti.
+
+Ogni personaggio può avere:
+
+Nome abilità
+Tipo
+Livello
+Esperienza
+Potenziale
+Descrizione
+
+Esempi:
+
+Spada
+Arco
+Schivata
+Furtività
+Percezione
+Medicina
+Persuasione
+Sopravvivenza
+Magia del fuoco
+Controllo del mana
+7. Conoscenze
+
+Separata dalle abilità.
+
+Per esempio:
+
+Conoscenza della medicina
+Conoscenza della magia
+Conoscenza di una lingua
+Conoscenza di una regione
+Conoscenza di una creatura
+Conoscenza di una professione
+8. Talenti
+
+Capacità innate o particolari.
+
+Esempio:
+
+Vista notturna
+Memoria eccezionale
+Riflessi naturali
+Resistenza al veleno
+Affinità magica
+Rigenerazione
+
+Questi sono diversi dalle normali abilità perché non devono essere necessariamente allenati.
+
+9. Magia / capacità speciali
+
+Se il personaggio può utilizzare magia:
+
+Affinità
+Tipo di magia
+Potere magico
+Controllo magico
+Capacità conosciute
+Tecniche conosciute
+Livello di padronanza
+10. Progressione
+Livello generale
+Esperienza
+Esperienza necessaria
+Punti disponibili
+Crescita delle statistiche
+Crescita delle abilità
+11. Classe / professione
+Classe
+Sottoclasse
+Livello della classe
+Esperienza nella classe
+Professione
+Specializzazione
+12. Tratti
+
+Caratteristiche relativamente stabili:
+
+Nome
+Descrizione
+Categoria
+Intensità
+Stabilità
+
+Esempi:
+
+Prudente
+Aggressivo
+Curioso
+Testardo
+Coraggioso
+Pigro
+13. Personalità
+
+Qui descriviamo chi è la persona, non semplicemente le statistiche.
+
+Personalità
+Temperamento
+Valori
+Credenze
+Motivazioni
+Desideri
+Paure
+Insicurezze
+Avversioni
+Ideali
+14. Stato mentale
+
+La parte realmente dinamica della psicologia:
+
+Umore
+Stress
+Paura
+Rabbia
+Felicità
+Tristezza
+Fiducia
+Motivazione
+Stabilità mentale
+
+Questi valori possono cambiare durante la storia.
+
+15. Memoria
+
+Il personaggio deve ricordare ciò che gli succede.
+
+Evento
+Importanza
+Tipo
+Data/periodo
+Persone coinvolte
+Luogo
+Segreto/non segreto
+16. Relazioni
+
+Per ogni persona conosciuta:
+
+Persona
+Tipo di relazione
+Fiducia
+Affetto
+Rispetto
+Paura
+Odio
+Conoscenza reciproca
+17. Famiglia
+Genitori
+Fratelli
+Figli
+Partner
+Altri familiari
+Stato dei familiari
+18. Background
+Luogo di nascita
+Cultura
+Infanzia
+Educazione
+Famiglia d'origine
+Professione precedente
+Eventi importanti
+Esperienze
+Formazione
+19. Stato sociale
+Reputazione
+Fama
+Status sociale
+Ricchezza
+Professione
+Affiliazioni
+Titoli
+20. Dati tecnici
+
+Utili al programma ma non necessariamente visibili al giocatore:
+
+ID
+Data creazione
+Data ultima modifica
+Versione del personaggio
+Stato attivo/inattivo

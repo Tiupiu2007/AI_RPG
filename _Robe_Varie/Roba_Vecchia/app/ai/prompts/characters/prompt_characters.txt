@@ -1,0 +1,444 @@
+Struttura dei prompt dei personaggi
+1. character_base.py ✅
+
+Scopo: regole fondamentali comuni a tutti i sistemi dei personaggi.
+
+Deve definire:
+
+continuità del personaggio
+coerenza narrativa
+identità
+statistiche
+progressione
+classi
+tratti
+psicologia
+stato
+memoria
+conoscenze
+famiglia
+relazioni
+autonomia del personaggio
+conseguenze
+cronologia
+distinzione tra realtà, conoscenza e convinzioni
+cosa può decidere l'IA e cosa decide il game engine
+regole generali per non inventare informazioni
+
+Non deve: creare, modificare o salvare direttamente personaggi.
+
+2. character_creation.py ← prossimo
+
+Scopo: dare all'IA le istruzioni necessarie per creare un nuovo personaggio.
+
+Deve occuparsi esclusivamente della creazione.
+
+Deve stabilire:
+Identità iniziale
+
+Come determinare:
+
+nome
+cognome
+età
+sesso
+genere
+specie
+Aspetto
+
+Come creare:
+
+descrizione fisica
+aspetto
+voce
+Personalità iniziale
+
+Come determinare:
+
+tratti
+psicologia
+valori
+motivazioni
+obiettivi
+Statistiche iniziali
+
+Come assegnare:
+
+forza
+costituzione
+velocità
+intelligenza
+percezione
+volontà
+fortuna
+
+Rispettando i limiti del sistema.
+
+Progressione iniziale
+
+Definire:
+
+livello iniziale
+XP
+XP necessaria
+eventuali punti disponibili
+Classi iniziali
+
+Stabilire:
+
+eventuale classe
+classe primaria
+livello della classe
+Stato iniziale
+
+Creare eventualmente:
+
+emozione
+pensiero
+intenzione
+obiettivo immediato
+Memorie iniziali
+
+Regola fondamentale:
+
+Un personaggio appena creato non deve possedere automaticamente memorie di eventi che non ha vissuto.
+
+Può però avere:
+
+ricordi del proprio passato
+conoscenze iniziali
+esperienze precedenti
+
+se queste vengono definite durante la creazione.
+
+Famiglia
+
+Può creare legami familiari solo se espressamente definiti o logicamente necessari alla creazione.
+
+Non deve inventare una famiglia enorme casualmente.
+
+Coerenza
+
+Il nuovo personaggio deve essere coerente con:
+
+mondo
+epoca
+specie
+situazione
+luogo
+informazioni fornite
+eventuale storia già esistente
+Non deve fare:
+modificare personaggi esistenti
+modificare relazioni esistenti
+inventare eventi futuri
+decidere cosa succederà al personaggio
+modificare direttamente il database
+ignorare i limiti del game engine
+3. character_update.py ✅
+
+Scopo: gestire la modifica di un personaggio già esistente.
+
+Deve stabilire:
+
+quando una modifica è giustificata
+quali campi possono cambiare
+quali devono rimanere stabili
+come modificare tratti
+psicologia
+stato
+statistiche
+progressione
+memorie
+classi
+famiglia
+altre informazioni
+
+La modifica deve sempre avere una causa narrativa.
+
+4. character_state.py
+
+Scopo: gestire esclusivamente lo stato momentaneo del personaggio.
+
+Deve gestire:
+
+emozione
+pensiero
+intenzione
+obiettivo immediato
+
+Deve spiegare la differenza tra:
+
+stato momentaneo
+
+e
+
+caratteristica permanente.
+
+Esempio:
+
+emozione = paura
+
+non significa:
+
+tratto = codardo
+
+5. character_psychology.py
+
+Scopo: gestire la psicologia profonda.
+
+Deve gestire:
+
+paure
+desideri
+traumi
+ossessioni
+motivazioni
+insicurezze
+convinzioni
+conflitti interiori
+bisogni
+
+Deve stabilire come la psicologia influenza il comportamento senza renderlo deterministico.
+
+6. character_traits.py
+
+Scopo: gestire i tratti relativamente stabili.
+
+Esempi:
+
+coraggioso
+curioso
+impulsivo
+leale
+diffidente
+orgoglioso
+
+Deve stabilire:
+
+quando creare un tratto
+quando modificarlo
+quando rafforzarlo
+quando indebolirlo
+quando eliminarlo
+
+Il cambiamento deve essere graduale quando appropriato.
+
+7. character_memories.py
+
+Scopo: gestire ciò che il personaggio ricorda.
+
+Deve distinguere chiaramente:
+
+evento reale
+→ informazione conosciuta
+→ memoria del personaggio
+
+Deve gestire:
+
+eventi ricordati
+persone
+luoghi
+conoscenze
+esperienze
+segreti
+importanza
+memorie false/errate quando narrativamente appropriate
+
+Regola fondamentale:
+
+L'IA non deve dare al personaggio informazioni che non può conoscere.
+
+8. character_relationships.py
+
+Scopo: gestire i rapporti sociali non familiari.
+
+Deve gestire:
+
+fiducia
+affetto
+rispetto
+ostilità
+tipo di rapporto
+
+E soprattutto come e quando questi valori cambiano.
+
+Un rapporto non deve passare da amico a nemico senza una causa.
+
+9. character_family.py
+
+Scopo: gestire esclusivamente i legami familiari.
+
+Deve gestire:
+
+genitore
+figlio
+fratello
+sorella
+nonno
+zio
+cugino
+coniuge
+partner
+famiglia adottiva
+ecc.
+
+Deve distinguere:
+
+biologico
+adottivo
+confermato
+non confermato
+10. character_progression.py
+
+Scopo: gestire la crescita del personaggio.
+
+Deve controllare:
+
+XP
+livello
+level-up
+punti statistica
+limiti
+crescita delle capacità
+
+Regola:
+
+La progressione deve derivare dalle azioni e dagli eventi realmente avvenuti.
+
+L'IA può proporre una ricompensa, ma il game engine decide se applicarla.
+
+11. character_stats.py
+
+Scopo: gestire le statistiche numeriche.
+
+Deve definire come interpretare:
+
+forza
+costituzione
+velocità
+intelligenza
+percezione
+volontà
+fortuna
+
+E soprattutto:
+
+Le statistiche non rappresentano emozioni momentanee.
+
+12. character_classes.py
+
+Scopo: gestire le classi e i percorsi di sviluppo.
+
+Deve definire:
+
+cosa rappresenta una classe
+come viene assegnata
+come può cambiare
+come può evolvere
+rapporto tra classe e capacità
+
+Regola:
+
+La classe non determina la personalità.
+
+13. character_knowledge.py
+
+Scopo: gestire ciò che il personaggio sa.
+
+Questo secondo me sarà particolarmente importante per il tuo RPG.
+
+Deve distinguere:
+
+verità del mondo
+informazioni conosciute
+informazioni sconosciute
+supposizioni
+convinzioni
+informazioni false
+informazioni segrete
+
+Esempio:
+
+Il giocatore sa che il re è morto.
+
+Il personaggio non era presente e nessuno glielo ha detto.
+
+→ Il personaggio NON sa che il re è morto.
+
+14. character_decision.py
+
+Scopo: determinare come un personaggio decide cosa fare.
+
+Deve considerare:
+
+personalità + psicologia + stato + memoria + conoscenza + relazioni + obiettivi + situazione
+
+Il personaggio deve poter:
+
+collaborare
+rifiutare
+mentire
+scappare
+attaccare
+aiutare
+tradire
+discutere
+
+Non deve obbedire automaticamente al giocatore.
+
+15. character_reaction.py
+
+Scopo: determinare la reazione del personaggio a un evento.
+
+Deve considerare:
+
+evento
+stato precedente
+psicologia
+tratti
+memoria
+conoscenza
+relazione con le persone coinvolte
+obiettivi
+
+E produrre una reazione coerente.
+
+16. character_consistency.py
+
+Scopo: controllo finale di coerenza.
+
+Prima che una modifica venga proposta al game engine deve verificare:
+
+È coerente con il personaggio?
+Ha una causa?
+Il personaggio può conoscere questa informazione?
+È coerente con la cronologia?
+È coerente con psicologia e tratti?
+È coerente con le relazioni?
+Sto inventando qualcosa?
+Sto modificando qualcosa che dovrebbe essere stabile?
+La modifica è realmente necessaria?
+Contraddice informazioni precedenti?
+Quindi la sequenza che seguiremo
+character_base.py
+        │
+        ├── character_creation.py
+        ├── character_update.py
+        ├── character_state.py
+        ├── character_psychology.py
+        ├── character_traits.py
+        ├── character_memories.py
+        ├── character_relationships.py
+        ├── character_family.py
+        ├── character_progression.py
+        ├── character_stats.py
+        ├── character_classes.py
+        ├── character_knowledge.py
+        ├── character_decision.py
+        ├── character_reaction.py
+        └── character_consistency.py
+
+Importante: non dobbiamo per forza fare tutti questi file subito. Questa è la struttura logica complessiva. Poi li implementiamo uno alla volta, mantenendo character_base.py come fondamento e senza riscrivere quelli già completati.
+
+Il prossimo, quindi, è character_creation.py.
