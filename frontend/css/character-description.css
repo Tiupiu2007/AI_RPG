@@ -46,9 +46,20 @@
     font-size: .78rem;
 }
 
+.description-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 @media (max-width: 700px) {
     .description-footer {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .description-actions {
+        width: 100%;
     }
 }
