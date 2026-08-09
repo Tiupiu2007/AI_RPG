@@ -1,0 +1,46 @@
+/* =========================================================
+   LANGUAGE SELECTOR
+   Stesso stile del selettore Razza
+========================================================= */
+
+#languageSelect {
+    width: 100%;
+    min-height: 40px;
+    background: #111216;
+    border: 1px solid #2c2e35;
+    color: #eeeeef;
+    border-radius: 6px;
+    padding: 11px 12px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: border 0.15s, background 0.15s;
+}
+
+#languageSelect:hover {
+    border-color: #393c44;
+}
+
+#languageSelect:focus {
+    border-color: #666a74;
+    background: #131419;
+}
+
+#languageSelect option {
+    background: #17181d;
+    color: #eeeeef;
+}
+
+.language-add-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+}
+
+@media (max-width: 600px) {
+    .language-add-row {
+        grid-template-columns: 1fr;
+    }
+}
