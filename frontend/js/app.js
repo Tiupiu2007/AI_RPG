@@ -4,7 +4,8 @@
 //
 // Stato principale dell'interfaccia.
 // Razze e lingue arrivano dal backend.
-// Il personaggio viene mantenuto anche in localStorage.
+// La generazione completa usa codice per i dati deterministici
+// e IA per identità, aspetto, psicologia e personalità.
 //
 // =========================================================
 
@@ -13,6 +14,21 @@ let availableRaces = [];
 let availableLanguages = [];
 
 const STORAGE_KEY = "ai-rpg-character";
+
+const PROFILE_FIELDS = [
+    "mentalState",
+    "emotionalStability",
+    "fears",
+    "desires",
+    "values",
+    "traumas",
+    "personalityDescription",
+    "traits",
+    "strengths",
+    "flaws",
+    "habits",
+    "socialBehavior"
+];
 
 // =========================================================
 // ELEMENTI DOM
@@ -56,7 +72,23 @@ function createEmptyCharacter() {
             physical_description: "",
             appearance: ""
         },
-        languages: []
+        languages: [],
+        psychology: {
+            mental_state: "",
+            emotional_stability: "",
+            fears: "",
+            desires: "",
+            values: "",
+            traumas: ""
+        },
+        personality: {
+            personality_description: "",
+            traits: "",
+            strengths: "",
+            flaws: "",
+            habits: "",
+            social_behavior: ""
+        }
     };
 }
 
@@ -68,6 +100,8 @@ function normalizeCharacter(value) {
     }
 
     const identity = value.identity || {};
+    const psychology = value.psychology || {};
+    const personality = value.personality || {};
 
     return {
         identity: {
@@ -75,7 +109,15 @@ function normalizeCharacter(value) {
             ...identity,
             age: Number.isFinite(Number(identity.age)) ? Number(identity.age) : 0
         },
-        languages: Array.isArray(value.languages) ? value.languages : []
+        languages: Array.isArray(value.languages) ? value.languages : [],
+        psychology: {
+            ...empty.psychology,
+            ...psychology
+        },
+        personality: {
+            ...empty.personality,
+            ...personality
+        }
     };
 }
 
@@ -136,7 +178,6 @@ function initializeNavigation() {
             if (!section) return;
 
             showSection(section);
-
             buttons.forEach(other => other.classList.remove("active"));
             button.classList.add("active");
         });
@@ -149,10 +190,7 @@ function showSection(section) {
     });
 
     const target = document.getElementById(`${section}Section`);
-
-    if (target) {
-        target.classList.remove("hidden");
-    }
+    if (target) target.classList.remove("hidden");
 }
 
 function activateSection(section) {
@@ -197,12 +235,10 @@ async function handleRaceChange() {
 
     const raceName = inputs.race.value.trim();
     const race = findRace(raceName);
-
     if (!race) return;
 
     character.identity.race = race.name;
 
-    // Le lingue dipendono dalla razza e vengono ricalcolate dal backend.
     try {
         const response = await fetch("/api/race-languages", {
             method: "POST",
@@ -256,8 +292,79 @@ function loadCharacterIntoUI() {
     inputs.physicalDescription.value = identity.physical_description || "";
     inputs.appearance.value = identity.appearance || "";
 
+    PROFILE_FIELDS.forEach(field => {
+        const input = document.getElementById(field);
+        if (!input) return;
+
+        const section = getProfileValue(field);
+        input.value = section || "";
+    });
+
     loadLanguages();
     updateCharacterTitle();
+}
+
+function getProfileValue(field) {
+    const psychologyMap = {
+        mentalState: "mental_state",
+        emotionalStability: "emotional_stability",
+        fears: "fears",
+        desires: "desires",
+        values: "values",
+        traumas: "traumas"
+    };
+
+    const personalityMap = {
+        personalityDescription: "personality_description",
+        traits: "traits",
+        strengths: "strengths",
+        flaws: "flaws",
+        habits: "habits",
+        socialBehavior: "social_behavior"
+    };
+
+    if (psychologyMap[field]) {
+        return character.psychology[psychologyMap[field]];
+    }
+
+    if (personalityMap[field]) {
+        return character.personality[personalityMap[field]];
+    }
+
+    return "";
+}
+
+function updateProfileFromUI() {
+    const psychologyMap = {
+        mentalState: "mental_state",
+        emotionalStability: "emotional_stability",
+        fears: "fears",
+        desires: "desires",
+        values: "values",
+        traumas: "traumas"
+    };
+
+    const personalityMap = {
+        personalityDescription: "personality_description",
+        traits: "traits",
+        strengths: "strengths",
+        flaws: "flaws",
+        habits: "habits",
+        socialBehavior: "social_behavior"
+    };
+
+    PROFILE_FIELDS.forEach(field => {
+        const input = document.getElementById(field);
+        if (!input) return;
+
+        if (psychologyMap[field]) {
+            character.psychology[psychologyMap[field]] = input.value.trim();
+        }
+
+        if (personalityMap[field]) {
+            character.personality[personalityMap[field]] = input.value.trim();
+        }
+    });
 }
 
 // =========================================================
@@ -331,6 +438,7 @@ function updateCharacterFromUI() {
     character.identity.physical_description = inputs.physicalDescription.value.trim();
     character.identity.appearance = inputs.appearance.value.trim();
 
+    updateProfileFromUI();
     saveLocalCharacter();
     updateCharacterTitle();
 }
@@ -338,7 +446,12 @@ function updateCharacterFromUI() {
 function initializeInputListeners() {
     Object.values(inputs).forEach(input => {
         if (!input) return;
+        input.addEventListener("input", updateCharacterFromUI);
+    });
 
+    PROFILE_FIELDS.forEach(field => {
+        const input = document.getElementById(field);
+        if (!input) return;
         input.addEventListener("input", updateCharacterFromUI);
     });
 }
@@ -379,22 +492,38 @@ function newCharacter() {
 
 function saveLocalCharacter() {
     if (!character) return;
-
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(character)
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(character));
 }
 
-function saveCharacter() {
+async function saveCharacter() {
     updateCharacterFromUI();
     saveLocalCharacter();
 
-    alert("Personaggio salvato.");
+    try {
+        const response = await fetch("/api/characters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(character)
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "Salvataggio sul database fallito.");
+        }
+
+        const saved = await response.json();
+        if (saved.id !== undefined) character.id = saved.id;
+        saveLocalCharacter();
+
+        alert("Personaggio salvato.");
+    } catch (error) {
+        console.error(error);
+        alert(`Salvataggio locale eseguito, ma database non aggiornato.\n\n${error.message}`);
+    }
 }
 
 // =========================================================
-// GENERAZIONE IA
+// GENERAZIONE COMPLETA
 // =========================================================
 
 async function generateCharacter() {
@@ -408,7 +537,7 @@ async function generateCharacter() {
 
     try {
         setGenerationStep("stepRace", "active");
-        setProgress(10, "Scelta della razza...");
+        setProgress(10, "Scelta della razza tramite il catalogo...");
 
         const response = await fetch("/api/generate-character", {
             method: "POST",
@@ -425,32 +554,28 @@ async function generateCharacter() {
 
         setGenerationStep("stepRace", "completed");
         setGenerationStep("stepIdentity", "active");
-        setProgress(35, "Identità generata...");
-
-        await wait(250);
-
+        setProgress(30, "Identità, corpo e aspetto generati...");
+        await wait(150);
         setGenerationStep("stepIdentity", "completed");
+
         setGenerationStep("stepLanguages", "active");
-        setProgress(55, "Lingue della razza...");
-
-        await wait(250);
-
+        setProgress(45, "Lingue assegnate dal sistema della razza...");
+        await wait(150);
         setGenerationStep("stepLanguages", "completed");
+
         setGenerationStep("stepAppearance", "active");
-        setProgress(70, "Controllo dell'aspetto...");
-
-        await wait(250);
-
+        setProgress(60, "Verifica della coerenza fisica...");
+        await wait(150);
         setGenerationStep("stepAppearance", "completed");
-        setGenerationStep("stepConsistency", "active");
-        setProgress(85, "Controllo della coerenza...");
 
-        await wait(250);
+        setGenerationStep("stepConsistency", "active");
+        setProgress(75, "Generazione di psicologia e personalità...");
 
         character = normalizeCharacter(generated);
-        saveLocalCharacter();
         loadCharacterIntoUI();
+        saveLocalCharacter();
 
+        await wait(150);
         setGenerationStep("stepConsistency", "completed");
         setGenerationStep("stepComplete", "active");
         setProgress(95, "Completamento della scheda...");
@@ -459,11 +584,11 @@ async function generateCharacter() {
 
         setGenerationStep("stepComplete", "completed");
         setProgress(100, "Personaggio completato.");
-
         generationName.textContent = `${character.identity.name} ${character.identity.surname}`.trim();
 
         await wait(700);
         overlay.classList.add("hidden");
+        activateSection("identity");
 
     } catch (error) {
         console.error("Errore durante la generazione:", error);
@@ -498,7 +623,6 @@ function resetGeneration() {
         if (!element) return;
 
         element.classList.remove("active", "completed");
-
         const symbol = element.querySelector("span");
         if (symbol) symbol.textContent = "○";
     });
@@ -515,7 +639,6 @@ function setGenerationStep(id, state) {
     if (!element) return;
 
     element.classList.remove("active", "completed");
-
     const symbol = element.querySelector("span");
 
     if (state === "active") {
