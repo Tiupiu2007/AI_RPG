@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from app.characters.characters_identity import CharacterIdentity
+from app.characters.characters_languages import CharacterLanguage
 
 DATABASE_PATH = Path("data/characters.db")
 
@@ -30,6 +31,22 @@ def init_database() -> None:
                 appearance TEXT NOT NULL
             )
         """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS character_languages (
+                character_id INTEGER NOT NULL,
+                language_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                comprehension REAL NOT NULL DEFAULT 0.0,
+                speaking REAL NOT NULL DEFAULT 0.0,
+                writing REAL NOT NULL DEFAULT 0.0,
+                PRIMARY KEY (character_id, language_id),
+                FOREIGN KEY (character_id)
+                    REFERENCES characters(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
         connection.commit()
     finally:
         connection.close()
@@ -138,9 +155,97 @@ def update_identity(character_id: int, identity: CharacterIdentity) -> None:
         connection.close()
 
 
+def save_languages(character_id: int, languages: list[CharacterLanguage]) -> None:
+    if not isinstance(character_id, int):
+        raise TypeError("character_id deve essere un intero.")
+
+    if not isinstance(languages, list):
+        raise TypeError("languages deve essere una lista.")
+
+    connection = get_connection()
+    try:
+        connection.execute(
+            "DELETE FROM character_languages WHERE character_id = ?",
+            (character_id,)
+        )
+
+        for language in languages:
+            if not isinstance(language, CharacterLanguage):
+                raise TypeError("Ogni lingua deve essere un CharacterLanguage.")
+
+            connection.execute("""
+                INSERT INTO character_languages (
+                    character_id, language_id, name,
+                    comprehension, speaking, writing
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                character_id,
+                language.language_id,
+                language.name,
+                language.comprehension,
+                language.speaking,
+                language.writing,
+            ))
+
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def get_languages(character_id: int) -> list[CharacterLanguage]:
+    connection = get_connection()
+    try:
+        rows = connection.execute("""
+            SELECT language_id, name, comprehension, speaking, writing
+            FROM character_languages
+            WHERE character_id = ?
+            ORDER BY rowid
+        """, (character_id,)).fetchall()
+    finally:
+        connection.close()
+
+    return [
+        CharacterLanguage(
+            language_id=row["language_id"],
+            name=row["name"],
+            comprehension=row["comprehension"],
+            speaking=row["speaking"],
+            writing=row["writing"],
+        )
+        for row in rows
+    ]
+
+
+def save_character(
+    identity: CharacterIdentity,
+    languages: list[CharacterLanguage],
+    character_id: int | None = None,
+) -> int:
+    if character_id is None:
+        character_id = save_identity(identity)
+    else:
+        update_identity(character_id, identity)
+
+    save_languages(character_id, languages)
+    return character_id
+
+
+def get_character(character_id: int) -> dict | None:
+    identity = get_identity(character_id)
+    if identity is None:
+        return None
+
+    return {
+        "id": character_id,
+        "identity": identity,
+        "languages": get_languages(character_id),
+    }
+
+
 def delete_character(character_id: int) -> None:
     connection = get_connection()
     try:
+        connection.execute("PRAGMA foreign_keys = ON")
         cursor = connection.execute(
             "DELETE FROM characters WHERE id = ?",
             (character_id,)
