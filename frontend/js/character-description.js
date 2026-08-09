@@ -4,35 +4,47 @@
 
 export function initializeCharacterDescriptionUI() {
     const identitySection = document.getElementById("identitySection");
-    if (!identitySection || document.getElementById("characterDescription")) return;
+    const content = document.getElementById("content");
+    if (!content || document.getElementById("characterDescription")) return;
 
-    const firstCard = identitySection.querySelector(".card");
-    if (!firstCard) return;
-
-    const card = document.createElement("div");
-    card.className = "card character-description-card";
-    card.innerHTML = `
-        <div class="card-title">Descrizione di partenza</div>
-        <p class="description-hint">
-            Scrivi una breve descrizione del personaggio. Puoi indicare solo le idee principali:
-            età, aspetto, carattere, passato, capacità o qualsiasi dettaglio importante.
-            Il sistema completerà automaticamente tutto il resto mantenendo coerenza.
-        </p>
-        <textarea
-            id="characterDescription"
-            class="character-description-input"
-            placeholder="Esempio: Una ragazza elfica di 24 anni, timida, cresciuta in un villaggio isolato. È brava con la magia ma ha paura dei combattimenti."
-        ></textarea>
-        <div class="description-footer">
-            <span>Vuoto = generazione libera.</span>
-            <div class="description-actions">
-                <button id="clearCharacterDescription" type="button" class="secondary-button">Pulisci</button>
-                <button id="generateFromDescriptionButton" type="button" class="primary-button">✦ Genera da descrizione</button>
+    const section = document.createElement("div");
+    section.id = "characterDescriptionSection";
+    section.className = "section character-description-section";
+    section.innerHTML = `
+        <div class="section-header">
+            <div>
+                <span class="section-number">00</span>
+                <h2>Descrizione di partenza</h2>
+                <p>Definisci le idee principali e lascia che il sistema completi il personaggio mantenendo la coerenza.</p>
+            </div>
+        </div>
+        <div class="card character-description-card">
+            <div class="card-title">Descrizione del personaggio</div>
+            <p class="description-hint">
+                Scrivi una breve descrizione del personaggio. Puoi indicare solo le idee principali:
+                età, aspetto, carattere, passato, capacità o qualsiasi dettaglio importante.
+                Il sistema completerà automaticamente tutto il resto mantenendo coerenza.
+            </p>
+            <textarea
+                id="characterDescription"
+                class="character-description-input"
+                placeholder="Esempio: Una ragazza elfica di 24 anni, timida, cresciuta in un villaggio isolato. È brava con la magia ma ha paura dei combattimenti."
+            ></textarea>
+            <div class="description-footer">
+                <span>Vuoto = generazione libera.</span>
+                <div class="description-actions">
+                    <button id="clearCharacterDescription" type="button" class="secondary-button">Pulisci</button>
+                    <button id="generateFromDescriptionButton" type="button" class="primary-button">✦ Genera da descrizione</button>
+                </div>
             </div>
         </div>
     `;
 
-    identitySection.insertBefore(card, firstCard);
+    if (identitySection) {
+        content.insertBefore(section, identitySection);
+    } else {
+        content.prepend(section);
+    }
 
     const input = document.getElementById("characterDescription");
 
