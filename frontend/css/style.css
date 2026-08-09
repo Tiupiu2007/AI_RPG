@@ -1,13 +1,11 @@
 /* =========================================================
    AI RPG — BASE LAYOUT
-   The individual feature styles remain in their own files.
+   Visual styling is handled by the feature CSS files.
 ========================================================= */
 
 * { box-sizing: border-box; }
 
-html, body {
-    min-height: 100%;
-}
+html, body { min-height: 100%; }
 
 body {
     margin: 0;
@@ -26,6 +24,7 @@ body {
     height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
+    flex-shrink: 0;
 }
 
 .main {
@@ -41,35 +40,21 @@ body {
     z-index: 50;
 }
 
-.topbar > div:first-child {
-    min-width: 0;
-}
-
-.topbar-actions {
-    flex-shrink: 0;
-}
+.topbar > div:first-child { min-width: 0; }
+.topbar-actions { flex-shrink: 0; }
 
 .content {
-    width: min(100%, 1120px);
+    width: min(100%, 1080px);
     min-height: calc(100vh - 84px);
+    margin: 0 auto;
 }
 
-.section {
-    width: 100%;
-}
+.section { width: 100%; }
+.section.hidden { display: none !important; }
 
-.section.hidden {
-    display: none !important;
-}
+.card { overflow: hidden; }
 
-.card {
-    overflow: hidden;
-}
-
-/* =========================================================
-   SAVED CHARACTERS
-========================================================= */
-
+/* Saved characters */
 .character-list {
     display: flex;
     flex-direction: column;
@@ -89,28 +74,10 @@ body {
     width: 100%;
     padding: 11px 12px;
     text-align: left;
-    color: #dfe2e6;
-    background: #181b20;
-    border: 1px solid #292e36;
-    border-radius: 8px;
-    transition: background .15s ease, border-color .15s ease, transform .15s ease;
-}
-
-.character-card:hover {
-    background: #20242a;
-    border-color: #3a404a;
-    transform: translateX(1px);
-}
-
-.character-card.active {
-    background: #252a31;
-    border-color: #464d58;
 }
 
 .character-card-name {
     display: block;
-    font-size: 13px;
-    font-weight: 650;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -119,24 +86,13 @@ body {
 .character-card-meta {
     display: block;
     margin-top: 4px;
-    color: #777e89;
-    font-size: 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* =========================================================
-   FORM LAYOUT
-========================================================= */
-
-.card + .card {
-    margin-top: 14px;
-}
-
-.card-title {
-    margin-bottom: 16px;
-}
+/* Forms */
+.card + .card { margin-top: 14px; }
 
 .form-grid {
     display: grid;
@@ -151,27 +107,19 @@ body {
     gap: 6px;
 }
 
-.field-wide {
-    grid-column: 1 / -1;
-}
+.field-wide { grid-column: 1 / -1; }
 
 .field input,
 .field select,
 .field textarea,
-.card > textarea {
-    width: 100%;
-}
+.card > textarea { width: 100%; }
 
 textarea {
     resize: vertical;
     min-height: 130px;
 }
 
-/* =========================================================
-   GENERATION OVERLAY
-   IMPORTANT: this must never participate in normal document flow.
-========================================================= */
-
+/* Generation: always an overlay, never normal page content */
 .generation-overlay {
     position: fixed !important;
     inset: 0 !important;
@@ -185,106 +133,19 @@ textarea {
     overflow: auto;
 }
 
-.generation-overlay.hidden {
-    display: none !important;
-}
+.generation-overlay.hidden { display: none !important; }
 
 .generation-window {
     position: relative;
-    width: min(500px, 100%);
+    width: min(460px, calc(100vw - 32px));
     max-height: calc(100vh - 48px);
     overflow-y: auto;
-    text-align: center;
 }
 
-.generation-symbol {
-    display: grid;
-    place-items: center;
-    width: 52px;
-    height: 52px;
-    margin: 0 auto 18px;
-    border: 1px solid #3b414b;
-    border-radius: 50%;
-    color: #f1f2f4;
-    background: #20242a;
-    font-size: 24px;
-}
+.progress-container { overflow: hidden; }
+.progress-bar { width: 0; transition: width .25s ease; }
 
-.generation-title {
-    color: #777e88;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 2px;
-}
-
-.generation-name {
-    margin-top: 9px;
-    color: #f1f2f4;
-    line-height: 1.3;
-}
-
-.progress-container {
-    width: 100%;
-    overflow: hidden;
-    border-radius: 999px;
-}
-
-.progress-bar {
-    height: 100%;
-    width: 0;
-    border-radius: inherit;
-    transition: width .25s ease;
-}
-
-.generation-steps {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 22px;
-    text-align: left;
-}
-
-.generation-step {
-    padding: 9px 10px;
-    border: 1px solid #292e36;
-    border-radius: 7px;
-    color: #6f7681;
-    background: #111419;
-    font-size: 11px;
-    transition: color .15s ease, border-color .15s ease, background .15s ease;
-}
-
-.generation-step.active,
-.generation-step.completed {
-    color: #e4e6e9;
-    border-color: #3b424d;
-    background: #1d2127;
-}
-
-.generation-step span {
-    display: inline-block;
-    width: 17px;
-}
-
-.generation-status {
-    margin-top: 18px;
-    color: #888f99;
-    font-size: 11px;
-    line-height: 1.5;
-}
-
-/* =========================================================
-   LEVEL / STATISTICS
-========================================================= */
-
-.level-card {
-    margin-bottom: 14px;
-}
-
-/* =========================================================
-   INVENTORY / MAGIC
-========================================================= */
-
+/* Inventory / magic containers */
 .magic-categories {
     display: flex;
     flex-direction: column;
@@ -294,13 +155,7 @@ textarea {
 #moneyEditor,
 #armorEditor,
 #weaponsEditor,
-#statisticsEditor {
-    width: 100%;
-}
-
-/* =========================================================
-   RESPONSIVE
-========================================================= */
+#statisticsEditor { width: 100%; }
 
 @media (max-width: 850px) {
     .sidebar {
@@ -309,39 +164,17 @@ textarea {
         max-height: none;
     }
 
-    #app {
-        align-items: stretch;
-    }
-
-    .topbar {
-        position: relative;
-    }
-
-    .topbar-actions {
-        justify-content: flex-start;
-    }
+    #app { align-items: stretch; }
+    .topbar { position: relative; }
+    .topbar-actions { justify-content: flex-start; }
 }
 
 @media (max-width: 700px) {
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .field-wide {
-        grid-column: auto;
-    }
-
-    .generation-steps {
-        grid-template-columns: 1fr;
-    }
+    .form-grid { grid-template-columns: 1fr; }
+    .field-wide { grid-column: auto; }
 }
 
 @media (max-width: 520px) {
-    .generation-overlay {
-        padding: 12px;
-    }
-
-    .generation-window {
-        max-height: calc(100vh - 24px);
-    }
+    .generation-overlay { padding: 12px; }
+    .generation-window { max-height: calc(100vh - 24px); }
 }
