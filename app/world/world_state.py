@@ -73,14 +73,15 @@ class WorldState:
         return location
 
     def remove_location(self, location_id: str) -> Location | None:
-        location = self.locations.pop(location_id, None)
-        if location is not None:
-            for route in list(self.geography.connected_routes(location_id, available_only=False)):
-                self.geography.remove_route(route.route_id)
-            for position in self.actor_positions.values():
-                if position.location_id == location_id or position.destination_id == location_id:
-                    raise ValueError(f"La località '{location_id}' è ancora usata da un attore.")
-            self.update()
+        location = self.locations.get(location_id)
+        if location is None:
+            return None
+        if any(position.location_id == location_id or position.destination_id == location_id for position in self.actor_positions.values()):
+            raise ValueError(f"La località '{location_id}' è ancora usata da un attore.")
+        for route in list(self.geography.connected_routes(location_id, available_only=False)):
+            self.geography.remove_route(route.route_id)
+        del self.locations[location_id]
+        self.update()
         return location
 
     def find_locations_by_name(self, name: str) -> list[Location]:
@@ -95,11 +96,9 @@ class WorldState:
     def add_route(self, route: Route) -> None:
         if not isinstance(route, Route):
             raise TypeError("È possibile aggiungere solo oggetti Route.")
-        if route.origin_id not in self.locations:
-            raise KeyError(f"Località origine non trovata: {route.origin_id}")
-        if route.destination_id not in self.locations:
-            raise KeyError(f"Località destinazione non trovata: {route.destination_id}")
-        self.geography.add_route(route)
+        if route.origin_id not in self.locations or route.destination_id not in self.locations:
+            raise KeyError("La rotta deve riferirsi a località esistenti.")
+        self.geography.add_route(route, locations=self.locations)
         self.update()
 
     def get_route(self, route_id: str) -> Route | None:
@@ -119,15 +118,10 @@ class WorldState:
         self.require_location(location_id)
         return self.geography.routes_to(location_id, available_only=available_only)
 
-    # ---------------------------------------------------------
-    # ACTOR POSITIONS
-    # ---------------------------------------------------------
-
     def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
         self.require_location(location_id)
         if not isinstance(actor_id, str) or not actor_id.strip():
             raise ValueError("actor_id non valido.")
-
         position = self.actor_positions.get(actor_id)
         if position is None:
             position = ActorPosition(actor_id=actor_id, location_id=location_id)
@@ -180,8 +174,7 @@ class WorldState:
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
         if not isinstance(data, dict):
             raise TypeError("Lo stato del mondo deve essere un dizionario.")
-        world_id = data.get("world_id")
-        name = data.get("name")
+        world_id, name = data.get("world_id"), data.get("name")
         if not isinstance(world_id, str) or not world_id.strip():
             raise ValueError("WorldState: world_id non valido.")
         if not isinstance(name, str) or not name.strip():
@@ -198,44 +191,36 @@ class WorldState:
         geography = Geography.from_dict(raw_geography) if isinstance(raw_geography, dict) else Geography()
         raw_clock = data.get("clock", {})
         clock = WorldClock.from_dict(raw_clock) if isinstance(raw_clock, dict) else WorldClock.create()
-
-        actor_positions: dict[str, ActorPosition] = {}
         raw_positions = data.get("actor_positions", {})
+        actor_positions: dict[str, ActorPosition] = {}
         if isinstance(raw_positions, dict):
             for position_data in raw_positions.values():
                 position = position_data if isinstance(position_data, ActorPosition) else ActorPosition.from_dict(position_data)
                 actor_positions[position.actor_id] = position
 
-        world = cls(
-            world_id=world_id,
-            name=name,
-            description=_string_or_empty(data.get("description")),
-            locations=locations,
-            geography=geography,
-            clock=clock,
-            actor_positions=actor_positions,
-            factions=_dict_or_empty(data.get("factions")),
-            events=_dict_or_empty(data.get("events")),
-            conditions=_dict_or_empty(data.get("conditions")),
-            metadata=_dict_or_empty(data.get("metadata")),
-            updated_at=_string_or_empty(data.get("updated_at")) or _utc_now(),
-        )
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
         return world
 
     def _validate_geography(self) -> None:
-        invalid_route_ids = [route_id for route_id, route in self.geography.routes.items() if route.origin_id not in self.locations or route.destination_id not in self.locations]
-        for route_id in invalid_route_ids:
+        invalid: list[str] = []
+        for route_id, route in self.geography.routes.items():
+            origin = self.locations.get(route.origin_id)
+            destination = self.locations.get(route.destination_id)
+            if origin is None or destination is None:
+                invalid.append(route_id)
+                continue
+            try:
+                route.validate_geometry(origin, destination)
+            except ValueError:
+                invalid.append(route_id)
+        for route_id in invalid:
             del self.geography.routes[route_id]
 
     def _validate_actor_positions(self) -> None:
-        invalid_actor_ids = [
-            actor_id for actor_id, position in self.actor_positions.items()
-            if position.location_id not in self.locations
-            or (position.destination_id is not None and position.destination_id not in self.locations)
-        ]
-        for actor_id in invalid_actor_ids:
+        invalid = [actor_id for actor_id, position in self.actor_positions.items() if position.location_id not in self.locations or (position.destination_id is not None and position.destination_id not in self.locations)]
+        for actor_id in invalid:
             del self.actor_positions[actor_id]
 
 
