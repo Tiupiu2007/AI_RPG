@@ -11,6 +11,7 @@ from .biomes import BiomeMap
 from .geography import Geography, Route
 from .locations import Location
 from .positions import ActorPosition
+from .regions import Region, RegionMap, RacialTerritory
 from .time import WorldClock
 
 
@@ -22,6 +23,7 @@ class WorldState:
     locations: dict[str, Location] = field(default_factory=dict)
     geography: Geography = field(default_factory=Geography)
     biomes: BiomeMap = field(default_factory=BiomeMap)
+    regions: RegionMap = field(default_factory=RegionMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
     actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
     factions: dict[str, Any] = field(default_factory=dict)
@@ -80,6 +82,9 @@ class WorldState:
             raise ValueError(f"La località '{location_id}' è ancora usata da un attore.")
         for route in list(self.geography.connected_routes(location_id, available_only=False)):
             self.geography.remove_route(route.route_id)
+        for region in self.regions.regions.values():
+            if location_id in region.location_ids:
+                region.location_ids.remove(location_id)
         del self.locations[location_id]
         self.update()
         return location
@@ -117,6 +122,27 @@ class WorldState:
     def routes_to(self, location_id: str, *, available_only: bool = True) -> list[Route]:
         self.require_location(location_id)
         return self.geography.routes_to(location_id, available_only=available_only)
+
+    def add_region(self, region: Region) -> None:
+        self.regions.add_region(region)
+        self.update()
+
+    def add_racial_territory(self, territory: RacialTerritory) -> None:
+        self.regions.add_territory(territory)
+        self.update()
+
+    def region_at(self, coordinates: dict[str, float]) -> Region | None:
+        return self.regions.region_at(coordinates)
+
+    def region_at_location(self, location_id: str) -> Region | None:
+        location = self.require_location(location_id)
+        return None if location.coordinates is None else self.region_at(location.coordinates)
+
+    def racial_concentrations_at(self, coordinates: dict[str, float]) -> dict[str, float]:
+        return self.regions.racial_concentrations_at(coordinates)
+
+    def dominant_race_at(self, coordinates: dict[str, float]) -> str | None:
+        return self.regions.dominant_race_at(coordinates)
 
     def biome_at_location(self, location_id: str) -> str | None:
         location = self.require_location(location_id)
@@ -166,7 +192,7 @@ class WorldState:
         return position
 
     def to_dict(self) -> dict[str, Any]:
-        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -183,12 +209,13 @@ class WorldState:
             locations[location.location_id] = location
         geography = Geography.from_dict(data.get("geography", {})) if isinstance(data.get("geography", {}), dict) else Geography()
         biomes = BiomeMap.from_dict(data.get("biomes", {})) if isinstance(data.get("biomes", {}), dict) else BiomeMap()
+        regions = RegionMap.from_dict(data.get("regions", {})) if isinstance(data.get("regions", {}), dict) else RegionMap()
         clock = WorldClock.from_dict(data.get("clock", {})) if isinstance(data.get("clock", {}), dict) else WorldClock.create()
         actor_positions: dict[str, ActorPosition] = {}
         for raw in (data.get("actor_positions", {}) if isinstance(data.get("actor_positions", {}), dict) else {}).values():
             position = raw if isinstance(raw, ActorPosition) else ActorPosition.from_dict(raw)
             actor_positions[position.actor_id] = position
-        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
         return world
