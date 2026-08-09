@@ -1,25 +1,225 @@
 const EXTRA_KEY = "ai-rpg-character-extra";
-const DEFAULT_EXTRA = { statistics:{strength:10,constitution:10,agility:10,intelligence:10,perception:10,willpower:10,charisma:10,luck:10}, abilities:[], skills:[], conditions:{health:100,stamina:100,mana:0,status:"Normale"}, relationships:[] };
+const STAT_NAMES = ["strength","constitution","agility","intelligence","perception","willpower","charisma","luck"];
+const DEFAULT_EXTRA = {
+    statistics: Object.fromEntries(STAT_NAMES.map(name => [name, 10])),
+    abilities: [],
+    skills: [],
+    conditions: { health: 100, stamina: 100, mana: 0, status: "Normale" },
+    relationships: []
+};
+
 let extra = loadExtra();
 
-function cloneDefaultExtra(){ return JSON.parse(JSON.stringify(DEFAULT_EXTRA)); }
-function loadExtra(){ try { return normalizeExtra(JSON.parse(localStorage.getItem(EXTRA_KEY))); } catch(_){ return cloneDefaultExtra(); } }
-function normalizeExtra(v){ const b=cloneDefaultExtra(); if(!v||typeof v!=="object") return b; return {statistics:{...b.statistics,...(v.statistics||{})},abilities:Array.isArray(v.abilities)?v.abilities:[],skills:Array.isArray(v.skills)?v.skills:[],conditions:{...b.conditions,...(v.conditions||{})},relationships:Array.isArray(v.relationships)?v.relationships:[]}; }
-function saveExtra(){ localStorage.setItem(EXTRA_KEY,JSON.stringify(extra)); }
-function esc(v){ return String(v??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function cloneDefaultExtra() { return clone(DEFAULT_EXTRA); }
 
-function renderStatistics(){
- const root=document.getElementById("statisticsEditor"); if(!root)return; root.innerHTML="";
- Object.entries(extra.statistics).forEach(([key,value])=>{ const label=key.charAt(0).toUpperCase()+key.slice(1); root.insertAdjacentHTML("beforeend",`<div class="stat-row"><span>${label}</span><input type="number" min="0" max="100" data-stat="${key}" value="${Number(value)||0}"></div>`); });
- root.querySelectorAll("[data-stat]").forEach(input=>input.addEventListener("input",()=>{extra.statistics[input.dataset.stat]=Math.max(0,Math.min(100,Number(input.value)||0));saveExtra();}));
+function loadExtra() {
+    try {
+        const local = JSON.parse(localStorage.getItem(EXTRA_KEY));
+        return normalizeExtra(local);
+    } catch (_) {
+        return cloneDefaultExtra();
+    }
 }
-function renderList(rootId,list,type){ const root=document.getElementById(rootId); if(!root)return; root.innerHTML=""; if(!list.length){root.innerHTML='<div class="extra-empty">Nessun elemento presente.</div>';return;} list.forEach((item,index)=>{const row=document.createElement("div");row.className="extra-item";row.innerHTML=`<div><strong>${esc(item.name)}</strong><span>${esc(item.description||"")}</span></div><button type="button" class="danger-button">Rimuovi</button>`;row.querySelector("button").addEventListener("click",()=>{extra[type].splice(index,1);saveExtra();renderList(rootId,extra[type],type);});root.appendChild(row);}); }
-function addListItem(type,nameId,descriptionId,rootId){const n=document.getElementById(nameId)?.value.trim(),d=document.getElementById(descriptionId)?.value.trim();if(!n)return;extra[type].push({name:n,description:d});document.getElementById(nameId).value="";document.getElementById(descriptionId).value="";saveExtra();renderList(rootId,extra[type],type);}
-function renderConditions(){["conditionHealth","conditionStamina","conditionMana","conditionStatus"].forEach(id=>{const i=document.getElementById(id);if(!i)return;const k={conditionHealth:"health",conditionStamina:"stamina",conditionMana:"mana",conditionStatus:"status"}[id];i.value=extra.conditions[k]??"";});}
-function bindConditions(){["conditionHealth","conditionStamina","conditionMana","conditionStatus"].forEach(id=>{const i=document.getElementById(id);if(!i)return;i.addEventListener("input",()=>{const k={conditionHealth:"health",conditionStamina:"stamina",conditionMana:"mana",conditionStatus:"status"}[id];extra.conditions[k]=i.type==="number"?Math.max(0,Number(i.value)||0):i.value.trim();saveExtra();});});}
-function generateBaseExtra(){const r=(document.getElementById("race")?.value||"").toLowerCase();const s={};Object.keys(DEFAULT_EXTRA.statistics).forEach(k=>s[k]=Math.floor(Math.random()*5)+8);if(r.includes("elf"))s.intelligence+=2;if(r.includes("orco")||r.includes("orc")||r.includes("nano")||r.includes("dwarf"))s.strength+=3;if(r.includes("dracon"))s.constitution+=2;extra.statistics=s;extra.conditions={health:100,stamina:100,mana:r.includes("elf")||r.includes("demone")?50:0,status:"Normale"};saveExtra();renderAll();}
-function resetExtra(){extra=cloneDefaultExtra();saveExtra();renderAll();}
-function renderAll(){renderStatistics();renderList("abilitiesList",extra.abilities,"abilities");renderList("skillsList",extra.skills,"skills");renderList("relationshipsList",extra.relationships,"relationships");renderConditions();}
-function initCharacterSections(){["statistics","abilities","skills","conditions","relationships"].forEach(s=>document.querySelector(`.nav-button[data-section="${s}"]`)?.classList.remove("disabled"));document.getElementById("addAbilityButton")?.addEventListener("click",()=>addListItem("abilities","abilityName","abilityDescription","abilitiesList"));document.getElementById("addSkillButton")?.addEventListener("click",()=>addListItem("skills","skillName","skillDescription","skillsList"));document.getElementById("addRelationshipButton")?.addEventListener("click",()=>addListItem("relationships","relationshipName","relationshipDescription","relationshipsList"));document.getElementById("generateBaseStatsButton")?.addEventListener("click",generateBaseExtra);document.getElementById("resetExtraButton")?.addEventListener("click",resetExtra);bindConditions();renderAll();}
-document.addEventListener("DOMContentLoaded",initCharacterSections);
-window.aiRpgCharacterSections={reset:resetExtra,generateBase:generateBaseExtra,render:renderAll};
+
+function normalizeExtra(value) {
+    const base = cloneDefaultExtra();
+    if (!value || typeof value !== "object") return base;
+    return {
+        statistics: { ...base.statistics, ...(value.statistics || {}) },
+        abilities: Array.isArray(value.abilities) ? value.abilities : [],
+        skills: Array.isArray(value.skills) ? value.skills : [],
+        conditions: { ...base.conditions, ...(value.conditions || {}) },
+        relationships: Array.isArray(value.relationships) ? value.relationships : []
+    };
+}
+
+function saveExtra() {
+    localStorage.setItem(EXTRA_KEY, JSON.stringify(extra));
+    syncWithCharacterStorage();
+}
+
+function syncWithCharacterStorage() {
+    try {
+        const character = JSON.parse(localStorage.getItem("ai-rpg-character"));
+        if (!character || typeof character !== "object") return;
+        character.extra = { ...(character.extra || {}), ...clone(extra) };
+        localStorage.setItem("ai-rpg-character", JSON.stringify(character));
+    } catch (_) {}
+}
+
+function esc(value) {
+    return String(value ?? "").replace(/[&<>\"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[char]));
+}
+
+function labelForStat(key) {
+    return {
+        strength: "Forza", constitution: "Costituzione", agility: "Agilità",
+        intelligence: "Intelligenza", perception: "Percezione", willpower: "Volontà",
+        charisma: "Carisma", luck: "Fortuna"
+    }[key] || key;
+}
+
+function renderStatistics() {
+    const root = document.getElementById("statisticsEditor");
+    if (!root) return;
+    root.innerHTML = "";
+
+    STAT_NAMES.forEach(key => {
+        const value = Number(extra.statistics[key]) || 0;
+        root.insertAdjacentHTML("beforeend", `
+            <div class="stat-row">
+                <span>${labelForStat(key)}</span>
+                <input type="number" min="0" max="100" data-stat="${key}" value="${value}">
+            </div>`);
+    });
+
+    root.querySelectorAll("[data-stat]").forEach(input => {
+        input.addEventListener("input", () => {
+            extra.statistics[input.dataset.stat] = Math.max(0, Math.min(100, Number(input.value) || 0));
+            saveExtra();
+        });
+    });
+}
+
+function renderList(rootId, list, type) {
+    const root = document.getElementById(rootId);
+    if (!root) return;
+    root.innerHTML = "";
+    if (!list.length) {
+        root.innerHTML = '<div class="extra-empty">Nessun elemento presente.</div>';
+        return;
+    }
+
+    list.forEach((item, index) => {
+        const row = document.createElement("div");
+        row.className = "extra-item";
+        row.innerHTML = `<div><strong>${esc(item.name)}</strong><span>${esc(item.description || "")}</span></div><button type="button" class="danger-button">Rimuovi</button>`;
+        row.querySelector("button").addEventListener("click", () => {
+            extra[type].splice(index, 1);
+            saveExtra();
+            renderList(rootId, extra[type], type);
+        });
+        root.appendChild(row);
+    });
+}
+
+function addListItem(type, nameId, descriptionId, rootId) {
+    const name = document.getElementById(nameId)?.value.trim();
+    const description = document.getElementById(descriptionId)?.value.trim();
+    if (!name) return;
+    extra[type].push({ name, description });
+    document.getElementById(nameId).value = "";
+    document.getElementById(descriptionId).value = "";
+    saveExtra();
+    renderList(rootId, extra[type], type);
+}
+
+function renderConditions() {
+    const map = {
+        conditionHealth: "health", conditionStamina: "stamina",
+        conditionMana: "mana", conditionStatus: "status"
+    };
+    Object.entries(map).forEach(([id, key]) => {
+        const input = document.getElementById(id);
+        if (input) input.value = extra.conditions[key] ?? "";
+    });
+}
+
+function bindConditions() {
+    const map = {
+        conditionHealth: "health", conditionStamina: "stamina",
+        conditionMana: "mana", conditionStatus: "status"
+    };
+    Object.entries(map).forEach(([id, key]) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener("input", () => {
+            extra.conditions[key] = input.type === "number"
+                ? Math.max(0, Number(input.value) || 0)
+                : input.value.trim();
+            saveExtra();
+        });
+    });
+}
+
+function generateBaseExtra() {
+    const race = (document.getElementById("race")?.value || "").toLowerCase();
+    const bias = {
+        elfo: {agility:4,intelligence:5,perception:4,constitution:-2},
+        nano: {strength:5,constitution:6,agility:-3},
+        orco: {strength:7,constitution:5,intelligence:-4,charisma:-2},
+        demone: {willpower:5,charisma:4},
+        draconide: {strength:4,constitution:5,willpower:3,agility:-2},
+        mezzelfo: {agility:3,intelligence:3,charisma:3}
+    }[race] || {intelligence:1, charisma:1};
+
+    const pool = [];
+    for (let i = 0; i < STAT_NAMES.length; i++) pool.push(Math.floor(Math.random() * 41) + 30);
+    pool.sort(() => Math.random() - 0.5);
+
+    const statistics = {};
+    STAT_NAMES.forEach((key, index) => {
+        statistics[key] = Math.max(5, Math.min(95, pool[index] + (bias[key] || 0) + Math.floor(Math.random() * 13) - 6));
+    });
+
+    const maxHealth = 70 + statistics.constitution * 2 + Math.floor(statistics.strength / 2);
+    const maxStamina = 50 + statistics.constitution + statistics.agility;
+    const maxMana = 20 + statistics.intelligence + statistics.willpower;
+
+    extra = {
+        ...cloneDefaultExtra(),
+        statistics,
+        conditions: { health: maxHealth, stamina: maxStamina, mana: maxMana, status: "Normale" }
+    };
+    saveExtra();
+    renderAll();
+}
+
+function setExtra(value) {
+    extra = normalizeExtra(value);
+    saveExtra();
+    renderAll();
+}
+
+function getExtra() {
+    return clone(extra);
+}
+
+function resetExtra() {
+    extra = cloneDefaultExtra();
+    saveExtra();
+    renderAll();
+}
+
+function renderAll() {
+    renderStatistics();
+    renderList("abilitiesList", extra.abilities, "abilities");
+    renderList("skillsList", extra.skills, "skills");
+    renderList("relationshipsList", extra.relationships, "relationships");
+    renderConditions();
+}
+
+function initCharacterSections() {
+    ["statistics","abilities","skills","conditions","relationships"].forEach(section => {
+        document.querySelector(`.nav-button[data-section="${section}"]`)?.classList.remove("disabled");
+    });
+
+    document.getElementById("addAbilityButton")?.addEventListener("click", () => addListItem("abilities", "abilityName", "abilityDescription", "abilitiesList"));
+    document.getElementById("addSkillButton")?.addEventListener("click", () => addListItem("skills", "skillName", "skillDescription", "skillsList"));
+    document.getElementById("addRelationshipButton")?.addEventListener("click", () => addListItem("relationships", "relationshipName", "relationshipDescription", "relationshipsList"));
+    document.getElementById("generateBaseStatsButton")?.addEventListener("click", generateBaseExtra);
+    document.getElementById("resetExtraButton")?.addEventListener("click", resetExtra);
+    bindConditions();
+    renderAll();
+}
+
+document.addEventListener("DOMContentLoaded", initCharacterSections);
+
+window.aiRpgCharacterSections = {
+    reset: resetExtra,
+    generateBase: generateBaseExtra,
+    render: renderAll,
+    getData: getExtra,
+    setData: setExtra
+};
