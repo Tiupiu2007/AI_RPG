@@ -1,7 +1,9 @@
 import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
+from app.characters.characters import Character
 from app.characters.characters_identity import CharacterIdentity
 from app.characters.characters_languages import CharacterLanguage
 
@@ -196,6 +198,18 @@ def save_character(identity: CharacterIdentity, languages: list[CharacterLanguag
         update_identity(character_id, identity, extra_data)
     save_languages(character_id, languages)
     return character_id
+
+
+def save_character_model(character: Character, character_id: int | None = None) -> int:
+    """Persist the complete modular Character without changing the existing schema."""
+    if not isinstance(character, Character):
+        raise TypeError("character deve essere un Character.")
+
+    payload: dict[str, Any] = dict(character.extra)
+    payload["inventory"] = character.inventory.to_dict()
+    payload["money"] = character.money.to_dict()
+    payload["magic"] = character.magic.to_dict()
+    return save_character(character.identity, character.languages, payload, character_id)
 
 
 def get_character(character_id: int) -> dict | None:
