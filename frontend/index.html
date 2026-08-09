@@ -82,10 +82,29 @@
 
             <div id="languagesSection" class="section hidden">
                 <div class="section-header">
-                    <div><span class="section-number">02</span><h2>Lingue</h2><p>Lingue conosciute dal personaggio.</p></div>
+                    <div>
+                        <span class="section-number">02</span>
+                        <h2>Lingue</h2>
+                        <p>Lingue conosciute dal personaggio.</p>
+                    </div>
                 </div>
-                <div class="card"><div class="card-title">Conoscenza linguistica</div><p class="card-description">Ogni lingua possiede tre livelli indipendenti: comprensione, parlato e scrittura.</p></div>
-                <div class="card"><div class="card-title">Lingue conosciute</div><div id="languagesList" class="languages-list"></div></div>
+
+                <div class="card">
+                    <div class="card-title">Aggiungi lingua</div>
+                    <p class="card-description">Le lingue sono prese esclusivamente dal catalogo ufficiale del mondo.</p>
+                    <div class="language-add-row">
+                        <select id="languageSelect">
+                            <option value="">Seleziona una lingua</option>
+                        </select>
+                        <button id="addLanguageButton" type="button" class="secondary-button">+ Aggiungi</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Lingue conosciute</div>
+                    <div id="languagesList" class="languages-list"></div>
+                </div>
+
                 <div class="card">
                     <div class="card-title">Livelli di conoscenza</div>
                     <div class="language-levels">
@@ -123,5 +142,6 @@
 
 <script type="module" src="js/app.js"></script>
 <script type="module" src="js/database.js"></script>
+<script type="module" src="js/languages-editor.js"></script>
 </body>
 </html>
