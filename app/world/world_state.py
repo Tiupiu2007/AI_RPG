@@ -1,7 +1,7 @@
 """Core persistent state of the AI RPG world.
 
 This module contains only world-state orchestration. Concrete world entities
-such as locations remain implemented in their own modules.
+such as locations and geography remain implemented in their own modules.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from .geography import Geography, Route
 from .locations import Location
 
 
@@ -22,6 +23,7 @@ class WorldState:
     name: str
     description: str = ""
     locations: dict[str, Location] = field(default_factory=dict)
+    geography: Geography = field(default_factory=Geography)
     factions: dict[str, Any] = field(default_factory=dict)
     events: dict[str, Any] = field(default_factory=dict)
     conditions: dict[str, Any] = field(default_factory=dict)
@@ -67,29 +69,27 @@ class WorldState:
         self.update()
 
     def get_location(self, location_id: str) -> Location | None:
-        """Return a location by ID, or None when it does not exist."""
         return self.locations.get(location_id)
 
     def require_location(self, location_id: str) -> Location:
-        """Return a location or raise when it does not exist."""
         location = self.get_location(location_id)
         if location is None:
             raise KeyError(f"Località non trovata: {location_id}")
         return location
 
     def remove_location(self, location_id: str) -> Location | None:
-        """Remove a location and return it, if present."""
+        """Remove a location and its connected routes."""
         location = self.locations.pop(location_id, None)
         if location is not None:
+            for route in list(self.geography.connected_routes(location_id, available_only=False)):
+                self.geography.remove_route(route.route_id)
             self.update()
         return location
 
     def find_locations_by_name(self, name: str) -> list[Location]:
-        """Find locations by exact case-insensitive name."""
         target = name.strip().casefold()
         if not target:
             return []
-
         return [
             location
             for location in self.locations.values()
@@ -97,8 +97,46 @@ class WorldState:
         ]
 
     def list_locations(self) -> list[Location]:
-        """Return all locations currently present in the world."""
         return list(self.locations.values())
+
+    # ---------------------------------------------------------
+    # GEOGRAPHY
+    # ---------------------------------------------------------
+
+    def add_route(self, route: Route) -> None:
+        """Add a geographic route after validating both locations exist."""
+        if not isinstance(route, Route):
+            raise TypeError("È possibile aggiungere solo oggetti Route.")
+        if route.origin_id not in self.locations:
+            raise KeyError(f"Località origine non trovata: {route.origin_id}")
+        if route.destination_id not in self.locations:
+            raise KeyError(f"Località destinazione non trovata: {route.destination_id}")
+
+        self.geography.add_route(route)
+        self.update()
+
+    def get_route(self, route_id: str) -> Route | None:
+        return self.geography.get_route(route_id)
+
+    def remove_route(self, route_id: str) -> Route | None:
+        route = self.geography.remove_route(route_id)
+        if route is not None:
+            self.update()
+        return route
+
+    def routes_from(self, location_id: str, *, available_only: bool = True) -> list[Route]:
+        self.require_location(location_id)
+        return self.geography.routes_from(
+            location_id,
+            available_only=available_only,
+        )
+
+    def routes_to(self, location_id: str, *, available_only: bool = True) -> list[Route]:
+        self.require_location(location_id)
+        return self.geography.routes_to(
+            location_id,
+            available_only=available_only,
+        )
 
     # ---------------------------------------------------------
     # SERIALIZATION
@@ -114,6 +152,7 @@ class WorldState:
                 location_id: location.to_dict()
                 for location_id, location in self.locations.items()
             },
+            "geography": self.geography.to_dict(),
             "factions": self.factions,
             "events": self.events,
             "conditions": self.conditions,
@@ -137,7 +176,6 @@ class WorldState:
 
         locations: dict[str, Location] = {}
         raw_locations = data.get("locations", {})
-
         if isinstance(raw_locations, dict):
             for location_id, location_data in raw_locations.items():
                 if isinstance(location_data, Location):
@@ -148,20 +186,41 @@ class WorldState:
                     raise TypeError(
                         f"Dati non validi per la località '{location_id}'."
                     )
-
                 locations[location.location_id] = location
 
-        return cls(
+        raw_geography = data.get("geography", {})
+        geography = (
+            Geography.from_dict(raw_geography)
+            if isinstance(raw_geography, dict)
+            else Geography()
+        )
+
+        world = cls(
             world_id=world_id,
             name=name,
             description=_string_or_empty(data.get("description")),
             locations=locations,
+            geography=geography,
             factions=_dict_or_empty(data.get("factions")),
             events=_dict_or_empty(data.get("events")),
             conditions=_dict_or_empty(data.get("conditions")),
             metadata=_dict_or_empty(data.get("metadata")),
             updated_at=_string_or_empty(data.get("updated_at")) or _utc_now(),
         )
+
+        world._validate_geography()
+        return world
+
+    def _validate_geography(self) -> None:
+        """Reject persisted routes that reference missing locations."""
+        invalid_route_ids = [
+            route_id
+            for route_id, route in self.geography.routes.items()
+            if route.origin_id not in self.locations
+            or route.destination_id not in self.locations
+        ]
+        for route_id in invalid_route_ids:
+            del self.geography.routes[route_id]
 
 
 def _utc_now() -> str:
