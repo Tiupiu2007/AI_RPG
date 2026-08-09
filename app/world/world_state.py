@@ -9,6 +9,7 @@ import uuid
 
 from .geography import Geography, Route
 from .locations import Location
+from .positions import ActorPosition
 from .time import WorldClock
 
 
@@ -22,6 +23,7 @@ class WorldState:
     locations: dict[str, Location] = field(default_factory=dict)
     geography: Geography = field(default_factory=Geography)
     clock: WorldClock = field(default_factory=WorldClock.create)
+    actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
     factions: dict[str, Any] = field(default_factory=dict)
     events: dict[str, Any] = field(default_factory=dict)
     conditions: dict[str, Any] = field(default_factory=dict)
@@ -75,6 +77,9 @@ class WorldState:
         if location is not None:
             for route in list(self.geography.connected_routes(location_id, available_only=False)):
                 self.geography.remove_route(route.route_id)
+            for position in self.actor_positions.values():
+                if position.location_id == location_id or position.destination_id == location_id:
+                    raise ValueError(f"La località '{location_id}' è ancora usata da un attore.")
             self.update()
         return location
 
@@ -114,6 +119,47 @@ class WorldState:
         self.require_location(location_id)
         return self.geography.routes_to(location_id, available_only=available_only)
 
+    # ---------------------------------------------------------
+    # ACTOR POSITIONS
+    # ---------------------------------------------------------
+
+    def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
+        self.require_location(location_id)
+        if not isinstance(actor_id, str) or not actor_id.strip():
+            raise ValueError("actor_id non valido.")
+
+        position = self.actor_positions.get(actor_id)
+        if position is None:
+            position = ActorPosition(actor_id=actor_id, location_id=location_id)
+            self.actor_positions[actor_id] = position
+        else:
+            position.arrive(location_id)
+        self.update()
+        return position
+
+    def get_actor_position(self, actor_id: str) -> ActorPosition | None:
+        return self.actor_positions.get(actor_id)
+
+    def require_actor_position(self, actor_id: str) -> ActorPosition:
+        position = self.get_actor_position(actor_id)
+        if position is None:
+            raise KeyError(f"Posizione non trovata per l'attore: {actor_id}")
+        return position
+
+    def begin_actor_travel(self, actor_id: str, destination_id: str, route_ids: tuple[str, ...]) -> ActorPosition:
+        self.require_location(destination_id)
+        position = self.require_actor_position(actor_id)
+        position.begin_travel(destination_id, route_ids)
+        self.update()
+        return position
+
+    def arrive_actor(self, actor_id: str, destination_id: str) -> ActorPosition:
+        self.require_location(destination_id)
+        position = self.require_actor_position(actor_id)
+        position.arrive(destination_id)
+        self.update()
+        return position
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "world_id": self.world_id,
@@ -122,6 +168,7 @@ class WorldState:
             "locations": {location_id: location.to_dict() for location_id, location in self.locations.items()},
             "geography": self.geography.to_dict(),
             "clock": self.clock.to_dict(),
+            "actor_positions": {actor_id: position.to_dict() for actor_id, position in self.actor_positions.items()},
             "factions": self.factions,
             "events": self.events,
             "conditions": self.conditions,
@@ -152,6 +199,13 @@ class WorldState:
         raw_clock = data.get("clock", {})
         clock = WorldClock.from_dict(raw_clock) if isinstance(raw_clock, dict) else WorldClock.create()
 
+        actor_positions: dict[str, ActorPosition] = {}
+        raw_positions = data.get("actor_positions", {})
+        if isinstance(raw_positions, dict):
+            for position_data in raw_positions.values():
+                position = position_data if isinstance(position_data, ActorPosition) else ActorPosition.from_dict(position_data)
+                actor_positions[position.actor_id] = position
+
         world = cls(
             world_id=world_id,
             name=name,
@@ -159,6 +213,7 @@ class WorldState:
             locations=locations,
             geography=geography,
             clock=clock,
+            actor_positions=actor_positions,
             factions=_dict_or_empty(data.get("factions")),
             events=_dict_or_empty(data.get("events")),
             conditions=_dict_or_empty(data.get("conditions")),
@@ -166,12 +221,22 @@ class WorldState:
             updated_at=_string_or_empty(data.get("updated_at")) or _utc_now(),
         )
         world._validate_geography()
+        world._validate_actor_positions()
         return world
 
     def _validate_geography(self) -> None:
         invalid_route_ids = [route_id for route_id, route in self.geography.routes.items() if route.origin_id not in self.locations or route.destination_id not in self.locations]
         for route_id in invalid_route_ids:
             del self.geography.routes[route_id]
+
+    def _validate_actor_positions(self) -> None:
+        invalid_actor_ids = [
+            actor_id for actor_id, position in self.actor_positions.items()
+            if position.location_id not in self.locations
+            or (position.destination_id is not None and position.destination_id not in self.locations)
+        ]
+        for actor_id in invalid_actor_ids:
+            del self.actor_positions[actor_id]
 
 
 def _utc_now() -> str:
