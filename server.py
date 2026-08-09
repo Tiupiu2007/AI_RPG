@@ -6,6 +6,7 @@ import sys
 
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
+from app.characters.character_from_description import generate_character_from_description
 from app.characters.characters_races import get_available_races
 from app.characters.characters_languages import (
     CharacterLanguage,
@@ -145,9 +146,6 @@ def character_to_dict(character):
 def generate_statistics(race_name):
     race_key = race_name.strip().lower()
     bias = RACE_STAT_BIASES.get(race_key, {})
-
-    # Distribuzione volutamente irregolare: ogni personaggio riceve un profilo
-    # diverso, ma la razza influenza le probabilità senza determinare il risultato.
     ranks = [random.randint(30, 72) for _ in STAT_NAMES]
     ranks.sort(reverse=True)
     random.shuffle(ranks)
@@ -157,7 +155,6 @@ def generate_statistics(race_name):
         value = ranks[index] + random.randint(-6, 6) + bias.get(name, 0)
         stats[name] = max(5, min(95, value))
 
-    # Una caratteristica principale e una secondaria vengono leggermente accentuate.
     primary = random.choice(list(bias.keys()) or list(STAT_NAMES))
     secondary = random.choice([name for name in STAT_NAMES if name != primary])
     stats[primary] = min(95, stats[primary] + random.randint(4, 10))
@@ -165,7 +162,7 @@ def generate_statistics(race_name):
     return stats
 
 
-def generate_extra(identity, profile):
+def generate_extra(identity, profile, source="system", description="", importance="major"):
     race = identity.race.strip().lower()
     stats = generate_statistics(identity.race)
     max_health = 70 + stats["constitution"] * 2 + stats["strength"] // 2
@@ -188,20 +185,18 @@ def generate_extra(identity, profile):
         "relationships": [],
         "psychology": {key: value for key, value in profile.items() if key in {"mental_state", "emotional_stability", "fears", "desires", "values", "traumas"}},
         "personality": {key: value for key, value in profile.items() if key in {"personality_description", "traits", "strengths", "flaws", "habits", "social_behavior"}},
+        "generation": {
+            "source": source,
+            "importance": importance,
+            "description": description,
+        },
     }
 
 
-def generate_character():
-    races = get_available_races()
-    if not races:
-        raise ValueError("Non sono presenti razze disponibili.")
-    weights = [max(0.0, float(race.rarity)) for race in races]
-    race = random.choices(races, weights=weights if any(weights) else None, k=1)[0]
-
-    identity = generate_identity(race.name)
+def build_generated_character(identity, source="system", description="", importance="major"):
     profile = profile_to_dict(generate_character_profile(identity_to_dict(identity)))
-    languages = get_race_languages(race.name)
-    extra = generate_extra(identity, profile)
+    languages = get_race_languages(identity.race)
+    extra = generate_extra(identity, profile, source, description, importance)
 
     return {
         "identity": identity_to_dict(identity),
@@ -210,6 +205,21 @@ def generate_character():
         "personality": extra["personality"],
         "extra": extra,
     }
+
+
+def generate_character(description="", source="system", importance="major"):
+    description = str(description or "").strip()
+    if description:
+        identity = generate_character_from_description(description)
+    else:
+        races = get_available_races()
+        if not races:
+            raise ValueError("Non sono presenti razze disponibili.")
+        weights = [max(0.0, float(race.rarity)) for race in races]
+        race = random.choices(races, weights=weights if any(weights) else None, k=1)[0]
+        identity = generate_identity(race.name)
+
+    return build_generated_character(identity, source, description, importance)
 
 
 class RPGServer(BaseHTTPRequestHandler):
@@ -249,7 +259,11 @@ class RPGServer(BaseHTTPRequestHandler):
         try:
             request_path = self.path.split("?", 1)[0].rstrip("/")
             if request_path == "/api/generate-character":
-                json_response(self, generate_character())
+                data = self.read_json()
+                description = data.get("description", "")
+                source = data.get("source", "system")
+                importance = data.get("importance", "major")
+                json_response(self, generate_character(description, source, importance))
                 return
             if request_path == "/api/characters":
                 data = self.read_json()
