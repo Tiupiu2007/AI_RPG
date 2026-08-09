@@ -1,8 +1,4 @@
-"""Deterministic movement through the world's geographic routes.
-
-Movement never invents a destination or travel duration. The pathfinder selects
-an available path and this engine calculates the travel time from its routes.
-"""
+"""Deterministic movement through the world's geographic routes."""
 
 from __future__ import annotations
 
@@ -10,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .geography import Route
 from .pathfinding import PathResult, PathfindingEngine
 from .world_state import WorldState
 
@@ -19,6 +14,7 @@ from .world_state import WorldState
 class MovementResult:
     """Result of a completed movement between two locations."""
 
+    actor_id: str
     origin_id: str
     destination_id: str
     route_ids: tuple[str, ...]
@@ -33,11 +29,11 @@ class MovementResult:
 
     @property
     def route_id(self) -> str | None:
-        """Backward-compatible direct-route accessor."""
         return self.route_ids[0] if len(self.route_ids) == 1 else None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "actor_id": self.actor_id,
             "origin_id": self.origin_id,
             "destination_id": self.destination_id,
             "route_ids": list(self.route_ids),
@@ -53,29 +49,18 @@ class MovementResult:
 
 
 class MovementEngine:
-    """Move an actor through valid paths in a WorldState."""
+    """Move actors through valid paths and persist their final position."""
 
     def __init__(self, world: WorldState) -> None:
         self.world = world
         self.pathfinding = PathfindingEngine(world)
 
-    def find_path(
-        self,
-        origin_id: str,
-        destination_id: str,
-        *,
-        prefer: str = "distance",
-    ) -> PathResult | None:
-        """Find a currently available path without changing world state."""
-        return self.pathfinding.find_path(
-            origin_id,
-            destination_id,
-            prefer=prefer,
-        )
+    def find_path(self, origin_id: str, destination_id: str, *, prefer: str = "distance") -> PathResult | None:
+        return self.pathfinding.find_path(origin_id, destination_id, prefer=prefer)
 
     def travel(
         self,
-        origin_id: str,
+        actor_id: str,
         destination_id: str,
         *,
         base_speed: float,
@@ -83,38 +68,37 @@ class MovementEngine:
         difficulty_modifier: float = 1.0,
         prefer: str = "distance",
     ) -> MovementResult:
-        """Travel through the cheapest available path.
+        """Move an existing actor from its persisted location to a destination.
 
-        ``base_speed`` is expressed in world-distance units per hour.
-        Modifiers below 1 slow travel; modifiers above 1 accelerate it.
-        The path itself is selected by the deterministic pathfinding engine.
+        The engine derives the origin from WorldState. Callers cannot silently
+        teleport an actor by supplying a different origin.
         """
-        if origin_id == destination_id:
-            raise ValueError("Origine e destinazione devono essere diverse.")
+        if not isinstance(actor_id, str) or not actor_id.strip():
+            raise ValueError("actor_id non valido.")
+        if not isinstance(destination_id, str) or not destination_id.strip():
+            raise ValueError("destination_id non valido.")
 
         _positive_number(base_speed, "La velocità base")
         _positive_number(terrain_modifier, "Il modificatore del terreno")
         _positive_number(difficulty_modifier, "Il modificatore della difficoltà")
 
+        position = self.world.require_actor_position(actor_id)
+        origin_id = position.location_id
+
+        if origin_id == destination_id:
+            raise ValueError("L'attore si trova già nella destinazione.")
+        if position.is_traveling:
+            raise ValueError("L'attore è già in viaggio.")
+
         path = self.find_path(origin_id, destination_id, prefer=prefer)
         if path is None:
-            raise ValueError(
-                f"Nessun percorso disponibile tra '{origin_id}' e '{destination_id}'."
-            )
+            raise ValueError(f"Nessun percorso disponibile tra '{origin_id}' e '{destination_id}'.")
 
         routes = [self.world.get_route(route_id) for route_id in path.route_ids]
         if any(route is None for route in routes):
             raise RuntimeError("Il percorso contiene una rotta non più presente nel mondo.")
 
-        effective_speed = (
-            float(base_speed)
-            * float(terrain_modifier)
-            * float(difficulty_modifier)
-        )
-
-        # Each route's difficulty slows the same movement speed. Summing the
-        # weighted travel times keeps the calculation deterministic and avoids
-        # letting one average difficulty hide a particularly difficult segment.
+        effective_speed = float(base_speed) * float(terrain_modifier) * float(difficulty_modifier)
         travel_hours = sum(
             route.distance * max(route.difficulty, 0.000001) / effective_speed
             for route in routes
@@ -122,11 +106,14 @@ class MovementEngine:
         travel_minutes = max(1, int(round(travel_hours * 60)))
 
         started_at = self.world.clock.current_time
+        self.world.begin_actor_travel(actor_id, destination_id, path.route_ids)
         arrived_at = self.world.advance_time_minutes(travel_minutes)
+        self.world.arrive_actor(actor_id, destination_id)
 
         return MovementResult(
-            origin_id=path.origin_id,
-            destination_id=path.destination_id,
+            actor_id=actor_id,
+            origin_id=origin_id,
+            destination_id=destination_id,
             route_ids=path.route_ids,
             location_ids=path.location_ids,
             total_distance=path.total_distance,
@@ -138,12 +125,12 @@ class MovementEngine:
             arrived_at=arrived_at,
         )
 
-    def available_destinations(self, origin_id: str) -> list[str]:
-        """Return destinations reachable directly from a location."""
-        self.world.require_location(origin_id)
+    def available_destinations(self, actor_id: str) -> list[str]:
+        """Return locations directly reachable from the actor's current position."""
+        position = self.world.require_actor_position(actor_id)
         return [
             route.destination_id
-            for route in self.world.routes_from(origin_id, available_only=True)
+            for route in self.world.routes_from(position.location_id, available_only=True)
         ]
 
 
