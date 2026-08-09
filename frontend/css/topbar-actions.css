@@ -1,0 +1,32 @@
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.topbar-actions button {
+    white-space: nowrap;
+}
+
+.topbar-actions .primary-button {
+    min-width: 175px;
+}
+
+.topbar-actions .secondary-button {
+    min-width: 145px;
+}
+
+@media (max-width: 850px) {
+    .topbar {
+        height: auto;
+        min-height: 90px;
+        padding: 18px 24px;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .topbar-actions {
+        flex-wrap: wrap;
+    }
+}
