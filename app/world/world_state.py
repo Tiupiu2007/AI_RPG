@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from .biomes import BiomeMap
 from .geography import Geography, Route
 from .locations import Location
 from .positions import ActorPosition
@@ -15,13 +16,12 @@ from .time import WorldClock
 
 @dataclass
 class WorldState:
-    """Represents the authoritative state of one game world."""
-
     world_id: str
     name: str
     description: str = ""
     locations: dict[str, Location] = field(default_factory=dict)
     geography: Geography = field(default_factory=Geography)
+    biomes: BiomeMap = field(default_factory=BiomeMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
     actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
     factions: dict[str, Any] = field(default_factory=dict)
@@ -118,6 +118,17 @@ class WorldState:
         self.require_location(location_id)
         return self.geography.routes_to(location_id, available_only=available_only)
 
+    def biome_at_location(self, location_id: str) -> str | None:
+        location = self.require_location(location_id)
+        return None if location.coordinates is None else self.biomes.biome_at(location.coordinates)
+
+    def biomes_between_locations(self, origin_id: str, destination_id: str, *, steps: int = 10) -> list[str | None]:
+        origin = self.require_location(origin_id)
+        destination = self.require_location(destination_id)
+        if origin.coordinates is None or destination.coordinates is None:
+            return []
+        return self.biomes.transition_between(origin.coordinates, destination.coordinates, steps=steps)
+
     def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
         self.require_location(location_id)
         if not isinstance(actor_id, str) or not actor_id.strip():
@@ -155,20 +166,7 @@ class WorldState:
         return position
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "world_id": self.world_id,
-            "name": self.name,
-            "description": self.description,
-            "locations": {location_id: location.to_dict() for location_id, location in self.locations.items()},
-            "geography": self.geography.to_dict(),
-            "clock": self.clock.to_dict(),
-            "actor_positions": {actor_id: position.to_dict() for actor_id, position in self.actor_positions.items()},
-            "factions": self.factions,
-            "events": self.events,
-            "conditions": self.conditions,
-            "metadata": self.metadata,
-            "updated_at": self.updated_at,
-        }
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -179,26 +177,18 @@ class WorldState:
             raise ValueError("WorldState: world_id non valido.")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("WorldState: name non valido.")
-
         locations: dict[str, Location] = {}
-        raw_locations = data.get("locations", {})
-        if isinstance(raw_locations, dict):
-            for location_data in raw_locations.values():
-                location = location_data if isinstance(location_data, Location) else Location.from_dict(location_data)
-                locations[location.location_id] = location
-
-        raw_geography = data.get("geography", {})
-        geography = Geography.from_dict(raw_geography) if isinstance(raw_geography, dict) else Geography()
-        raw_clock = data.get("clock", {})
-        clock = WorldClock.from_dict(raw_clock) if isinstance(raw_clock, dict) else WorldClock.create()
-        raw_positions = data.get("actor_positions", {})
+        for raw in (data.get("locations", {}) if isinstance(data.get("locations", {}), dict) else {}).values():
+            location = raw if isinstance(raw, Location) else Location.from_dict(raw)
+            locations[location.location_id] = location
+        geography = Geography.from_dict(data.get("geography", {})) if isinstance(data.get("geography", {}), dict) else Geography()
+        biomes = BiomeMap.from_dict(data.get("biomes", {})) if isinstance(data.get("biomes", {}), dict) else BiomeMap()
+        clock = WorldClock.from_dict(data.get("clock", {})) if isinstance(data.get("clock", {}), dict) else WorldClock.create()
         actor_positions: dict[str, ActorPosition] = {}
-        if isinstance(raw_positions, dict):
-            for position_data in raw_positions.values():
-                position = position_data if isinstance(position_data, ActorPosition) else ActorPosition.from_dict(position_data)
-                actor_positions[position.actor_id] = position
-
-        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
+        for raw in (data.get("actor_positions", {}) if isinstance(data.get("actor_positions", {}), dict) else {}).values():
+            position = raw if isinstance(raw, ActorPosition) else ActorPosition.from_dict(raw)
+            actor_positions[position.actor_id] = position
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
         return world
@@ -206,8 +196,7 @@ class WorldState:
     def _validate_geography(self) -> None:
         invalid: list[str] = []
         for route_id, route in self.geography.routes.items():
-            origin = self.locations.get(route.origin_id)
-            destination = self.locations.get(route.destination_id)
+            origin, destination = self.locations.get(route.origin_id), self.locations.get(route.destination_id)
             if origin is None or destination is None:
                 invalid.append(route_id)
                 continue
