@@ -12,6 +12,7 @@ from .geography import Geography, Route
 from .locations import Location
 from .positions import ActorPosition
 from .regions import Region, RegionMap, RacialTerritory
+from .settlements import Settlement, SettlementMap
 from .time import WorldClock
 
 
@@ -24,6 +25,7 @@ class WorldState:
     geography: Geography = field(default_factory=Geography)
     biomes: BiomeMap = field(default_factory=BiomeMap)
     regions: RegionMap = field(default_factory=RegionMap)
+    settlements: SettlementMap = field(default_factory=SettlementMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
     actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
     factions: dict[str, Any] = field(default_factory=dict)
@@ -78,6 +80,8 @@ class WorldState:
         location = self.locations.get(location_id)
         if location is None:
             return None
+        if self.settlements.at_location(location_id) is not None:
+            raise ValueError(f"La località '{location_id}' possiede ancora un insediamento.")
         if any(position.location_id == location_id or position.destination_id == location_id for position in self.actor_positions.values()):
             raise ValueError(f"La località '{location_id}' è ancora usata da un attore.")
         for route in list(self.geography.connected_routes(location_id, available_only=False)):
@@ -144,6 +148,42 @@ class WorldState:
     def dominant_race_at(self, coordinates: dict[str, float]) -> str | None:
         return self.regions.dominant_race_at(coordinates)
 
+    def add_settlement(self, settlement: Settlement) -> None:
+        if settlement.location_id not in self.locations:
+            raise KeyError("L'insediamento deve riferirsi a una località esistente.")
+        if settlement.region_id is not None and settlement.region_id not in self.regions.regions:
+            raise KeyError("La regione dell'insediamento non esiste.")
+        self.settlements.add(settlement)
+        location = self.locations[settlement.location_id]
+        location.attributes["settlement_id"] = settlement.settlement_id
+        location.attributes["settlement_type"] = settlement.settlement_type
+        if settlement.region_id is not None:
+            self.regions.regions[settlement.region_id].add_location(settlement.location_id)
+        self.update()
+
+    def get_settlement(self, settlement_id: str) -> Settlement | None:
+        return self.settlements.get(settlement_id)
+
+    def settlement_at_location(self, location_id: str) -> Settlement | None:
+        self.require_location(location_id)
+        return self.settlements.at_location(location_id)
+
+    def settlements_in_region(self, region_id: str) -> list[Settlement]:
+        if region_id not in self.regions.regions:
+            raise KeyError(f"Regione non trovata: {region_id}")
+        return self.settlements.in_region(region_id)
+
+    def population_at_location(self, location_id: str) -> int:
+        settlement = self.settlement_at_location(location_id)
+        return 0 if settlement is None else settlement.population.total
+
+    def population_in_region(self, region_id: str) -> int:
+        return sum(item.population.total for item in self.settlements_in_region(region_id))
+
+    def racial_population_at_location(self, location_id: str) -> dict[str, int]:
+        settlement = self.settlement_at_location(location_id)
+        return {} if settlement is None else settlement.population.distribution()
+
     def biome_at_location(self, location_id: str) -> str | None:
         location = self.require_location(location_id)
         return None if location.coordinates is None else self.biomes.biome_at(location.coordinates)
@@ -192,7 +232,7 @@ class WorldState:
         return position
 
     def to_dict(self) -> dict[str, Any]:
-        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -210,14 +250,16 @@ class WorldState:
         geography = Geography.from_dict(data.get("geography", {})) if isinstance(data.get("geography", {}), dict) else Geography()
         biomes = BiomeMap.from_dict(data.get("biomes", {})) if isinstance(data.get("biomes", {}), dict) else BiomeMap()
         regions = RegionMap.from_dict(data.get("regions", {})) if isinstance(data.get("regions", {}), dict) else RegionMap()
+        settlements = SettlementMap.from_dict(data.get("settlements", {})) if isinstance(data.get("settlements", {}), dict) else SettlementMap()
         clock = WorldClock.from_dict(data.get("clock", {})) if isinstance(data.get("clock", {}), dict) else WorldClock.create()
         actor_positions: dict[str, ActorPosition] = {}
         for raw in (data.get("actor_positions", {}) if isinstance(data.get("actor_positions", {}), dict) else {}).values():
             position = raw if isinstance(raw, ActorPosition) else ActorPosition.from_dict(raw)
             actor_positions[position.actor_id] = position
-        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, settlements=settlements, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
+        world._validate_settlements()
         return world
 
     def _validate_geography(self) -> None:
@@ -238,6 +280,17 @@ class WorldState:
         invalid = [actor_id for actor_id, position in self.actor_positions.items() if position.location_id not in self.locations or (position.destination_id is not None and position.destination_id not in self.locations)]
         for actor_id in invalid:
             del self.actor_positions[actor_id]
+
+    def _validate_settlements(self) -> None:
+        invalid: list[str] = []
+        for settlement_id, settlement in self.settlements.settlements.items():
+            if settlement.location_id not in self.locations:
+                invalid.append(settlement_id)
+                continue
+            if settlement.region_id is not None and settlement.region_id not in self.regions.regions:
+                invalid.append(settlement_id)
+        for settlement_id in invalid:
+            del self.settlements.settlements[settlement_id]
 
 
 def _utc_now() -> str:
