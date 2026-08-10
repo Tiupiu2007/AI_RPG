@@ -31,8 +31,7 @@ export function initializeCharacterDescriptionUI() {
 // =========================================================
 
 const INTERACTION_STORAGE_PREFIX = "ai-rpg-character-chat:";
-const OLLAMA_URL = "http://127.0.0.1:11434/api/chat";
-const OLLAMA_MODEL = "qwen3:8b";
+const CHARACTER_INTERACTION_ENDPOINT = "/api/character-interaction";
 
 function getCurrentCharacter() {
     try {
@@ -66,26 +65,6 @@ function escapeHtml(value) {
     }[char]));
 }
 
-function buildCharacterContext(character) {
-    const identity = character?.identity || {};
-    const psychology = character?.psychology || {};
-    const personality = character?.personality || {};
-    const extra = character?.extra || {};
-
-    return JSON.stringify({
-        identity,
-        psychology,
-        personality,
-        statistics: extra.statistics || {},
-        abilities: extra.abilities || [],
-        skills: extra.skills || [],
-        conditions: extra.conditions || {},
-        relationships: extra.relationships || [],
-        inventory: extra.inventory || {},
-        magic: extra.magic || {},
-    }, null, 2);
-}
-
 function ensureInteractionUI() {
     const nav = document.querySelector(".sidebar nav");
     const content = document.getElementById("content");
@@ -105,7 +84,7 @@ function ensureInteractionUI() {
             <div>
                 <span class="section-number">12</span>
                 <h2>Interazione</h2>
-                <p>Modalità di test: parla direttamente con il personaggio selezionato.</p>
+                <p>Modalità di test: parla con il personaggio attraverso il backend del gioco.</p>
             </div>
         </div>
         <div class="card character-interaction-card">
@@ -179,14 +158,14 @@ function renderInteraction() {
     const name = `${character?.identity?.name || ""} ${character?.identity?.surname || ""}`.trim();
     nameElement.textContent = name || "Nessun personaggio";
 
-    if (!character) {
-        chatElement.innerHTML = '<div class="chat-empty">Seleziona o genera un personaggio prima di iniziare una conversazione.</div>';
+    if (!character || !character.id) {
+        chatElement.innerHTML = '<div class="chat-empty">Seleziona o salva un personaggio prima di iniziare una conversazione.</div>';
         return;
     }
 
     const messages = loadChat(character);
     if (!messages.length) {
-        chatElement.innerHTML = '<div class="chat-empty">Questa è una modalità di test. Scrivi qualcosa: il personaggio risponderà usando i propri dati e la propria personalità.</div>';
+        chatElement.innerHTML = '<div class="chat-empty">Questa modalità usa il backend del gioco: il personaggio viene recuperato dal database e la risposta passa dal controller AI.</div>';
         return;
     }
 
@@ -208,7 +187,7 @@ async function sendCharacterMessage() {
     const character = getCurrentCharacter();
     const input = document.getElementById("characterChatInput");
     const sendButton = document.getElementById("sendCharacterMessage");
-    if (!character || !input || !sendButton) return;
+    if (!character?.id || !input || !sendButton) return;
 
     const text = input.value.trim();
     if (!text) return;
@@ -220,50 +199,38 @@ async function sendCharacterMessage() {
     renderInteraction();
 
     sendButton.disabled = true;
-    setInteractionStatus("Il personaggio sta pensando...");
-
-    const identity = character.identity || {};
-    const characterName = `${identity.name || "Personaggio"} ${identity.surname || ""}`.trim();
-    const systemPrompt = `Sei ${characterName}. Devi interpretare esclusivamente questo personaggio.
-
-Regole:
-- Rispondi in italiano.
-- Parla e ragiona coerentemente con personalità, psicologia, storia e conoscenze del personaggio.
-- Non conoscere informazioni che il personaggio non possiede.
-- Non controllare il giocatore.
-- Non inventare improvvisamente poteri, ricordi o informazioni incompatibili con il profilo.
-- Rispondi naturalmente, come in una conversazione reale.
-- Non descrivere il funzionamento dell'IA e non parlare come narratore.
-
-DATI DEL PERSONAGGIO:
-${buildCharacterContext(character)}`;
+    setInteractionStatus("Il game engine sta elaborando il turno...");
 
     try {
-        const response = await fetch(OLLAMA_URL, {
+        const response = await fetch(CHARACTER_INTERACTION_ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: OLLAMA_MODEL,
-                stream: false,
-                messages: [{ role: "system", content: systemPrompt }, ...messages.slice(-16)],
-                options: { temperature: 0.8 },
+                character_id: Number(character.id),
+                message: text,
+                recent_conversation: messages.slice(-16),
             }),
         });
 
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || "Ollama non ha accettato la richiesta.");
-        const reply = String(data?.message?.content || "").trim();
-        if (!reply) throw new Error("Il personaggio non ha restituito una risposta.");
+        if (!response.ok) {
+            throw new Error(data.error || `Backend HTTP ${response.status}`);
+        }
+
+        const reply = String(data.narration || "").trim();
+        if (!reply) {
+            throw new Error("Il game engine non ha prodotto una risposta narrativa.");
+        }
 
         messages.push({ role: "assistant", content: reply });
         saveChat(character, messages);
         renderInteraction();
-        setInteractionStatus("Pronto.");
+        setInteractionStatus("Turno completato.");
     } catch (error) {
         messages.pop();
         saveChat(character, messages);
         renderInteraction();
-        setInteractionStatus(`Errore: ${error.message}. Assicurati che Ollama sia attivo e che il modello ${OLLAMA_MODEL} sia disponibile.`);
+        setInteractionStatus(`Errore backend: ${error.message}`);
     } finally {
         sendButton.disabled = false;
         input.focus();
