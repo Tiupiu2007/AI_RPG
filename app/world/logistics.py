@@ -70,6 +70,30 @@ class LogisticsState:
     def active_orders(self) -> list[SupplyOrder]:
         return [order for order in self.orders.values() if order.status not in {"delivered", "cancelled"}]
 
+    def plan_supply(self, *, origin_id: str, destination_id: str, resource: str, amount: float, travel_hours: float, tariff: float = 0.0, market_supply: dict[str, float] | None = None) -> SupplyOrder:
+        if market_supply is not None and market_supply.get(resource, 0.0) < amount:
+            raise ValueError("Offerta insufficiente per pianificare il rifornimento.")
+        order = SupplyOrder.create(origin_id, destination_id, resource, amount, travel_hours=travel_hours, tariff=tariff)
+        self.add_order(order)
+        if market_supply is not None:
+            market_supply[resource] = market_supply.get(resource, 0.0) - amount
+        return order
+
+    def deliver(self, order: SupplyOrder, *, destination_stock: dict[str, float]) -> None:
+        if order.status != "delivered":
+            raise ValueError("La fornitura non è ancora consegnabile.")
+        destination_stock[order.resource] = destination_stock.get(order.resource, 0.0) + order.amount
+
+    def advance_and_deliver(self, hours: float, destination_stocks: dict[str, dict[str, float]]) -> list[SupplyOrder]:
+        delivered = self.advance(hours)
+        for order in delivered:
+            stock = destination_stocks.get(order.destination_id)
+            if stock is None:
+                order.status = "cancelled"
+                continue
+            self.deliver(order, destination_stock=stock)
+        return delivered
+
     def to_dict(self) -> dict[str, Any]:
         return {"orders": {k: v.to_dict() for k, v in self.orders.items()}}
 
