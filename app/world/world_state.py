@@ -8,6 +8,7 @@ from typing import Any
 import uuid
 
 from .biomes import BiomeMap
+from .environment import EnvironmentConditions, EnvironmentEngine, day_of_year
 from .geography import Geography, Route
 from .locations import Location
 from .positions import ActorPosition
@@ -27,6 +28,7 @@ class WorldState:
     regions: RegionMap = field(default_factory=RegionMap)
     settlements: SettlementMap = field(default_factory=SettlementMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
+    environment: EnvironmentEngine = field(default_factory=EnvironmentEngine)
     actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
     factions: dict[str, Any] = field(default_factory=dict)
     events: dict[str, Any] = field(default_factory=dict)
@@ -35,11 +37,11 @@ class WorldState:
     updated_at: str = field(default_factory=lambda: _utc_now())
 
     @classmethod
-    def create(cls, name: str, description: str = "", *, world_id: str | None = None, clock: WorldClock | None = None) -> "WorldState":
+    def create(cls, name: str, description: str = "", *, world_id: str | None = None, clock: WorldClock | None = None, environment_seed: int = 0) -> "WorldState":
         normalized_name = name.strip()
         if not normalized_name:
             raise ValueError("Il mondo deve avere un nome.")
-        return cls(world_id=world_id or str(uuid.uuid4()), name=normalized_name, description=description.strip(), clock=clock or WorldClock.create())
+        return cls(world_id=world_id or str(uuid.uuid4()), name=normalized_name, description=description.strip(), clock=clock or WorldClock.create(), environment=EnvironmentEngine(seed=environment_seed))
 
     def update(self) -> None:
         self.updated_at = _utc_now()
@@ -195,6 +197,15 @@ class WorldState:
             return []
         return self.biomes.transition_between(origin.coordinates, destination.coordinates, steps=steps)
 
+    def environment_at(self, coordinates: dict[str, float], *, latitude: float = 0.0, altitude: float = 0.0, biome: str | None = None) -> EnvironmentConditions:
+        return self.environment.conditions_at(year=self.clock.year, day_of_year=day_of_year(self.clock.month, self.clock.day), hour=self.clock.hour, minute=self.clock.minute, x=float(coordinates["x"]), y=float(coordinates["y"]), latitude=latitude, altitude=altitude, biome=biome)
+
+    def environment_at_location(self, location_id: str, *, latitude: float = 0.0, altitude: float = 0.0) -> EnvironmentConditions:
+        location = self.require_location(location_id)
+        if location.coordinates is None:
+            raise ValueError("La località non possiede coordinate.")
+        return self.environment_at(location.coordinates, latitude=latitude, altitude=altitude, biome=self.biome_at_location(location_id))
+
     def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
         self.require_location(location_id)
         if not isinstance(actor_id, str) or not actor_id.strip():
@@ -232,7 +243,7 @@ class WorldState:
         return position
 
     def to_dict(self) -> dict[str, Any]:
-        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "environment": {"seed": self.environment.seed}, "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -252,11 +263,13 @@ class WorldState:
         regions = RegionMap.from_dict(data.get("regions", {})) if isinstance(data.get("regions", {}), dict) else RegionMap()
         settlements = SettlementMap.from_dict(data.get("settlements", {})) if isinstance(data.get("settlements", {}), dict) else SettlementMap()
         clock = WorldClock.from_dict(data.get("clock", {})) if isinstance(data.get("clock", {}), dict) else WorldClock.create()
+        environment_data = data.get("environment", {}) if isinstance(data.get("environment", {}), dict) else {}
+        environment = EnvironmentEngine(seed=int(environment_data.get("seed", 0)))
         actor_positions: dict[str, ActorPosition] = {}
         for raw in (data.get("actor_positions", {}) if isinstance(data.get("actor_positions", {}), dict) else {}).values():
             position = raw if isinstance(raw, ActorPosition) else ActorPosition.from_dict(raw)
             actor_positions[position.actor_id] = position
-        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, settlements=settlements, clock=clock, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, settlements=settlements, clock=clock, environment=environment, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
         world._validate_settlements()
