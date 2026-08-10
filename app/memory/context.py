@@ -3,43 +3,84 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_continuity_facts(memories: list[dict[str, Any]], events: list[dict[str, Any]]) -> list[str]:
-    """Return explicit facts the character is allowed to treat as real."""
+def _clean_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = " ".join(value.strip().split())
+    return value or None
+
+
+def _belongs_to_character(item: dict[str, Any], character_id: int) -> bool:
+    """Accetta solo dati esplicitamente appartenenti al personaggio corrente."""
+    owner = item.get("character_id")
+    return isinstance(owner, int) and not isinstance(owner, bool) and owner == character_id
+
+
+def build_continuity_facts(
+    memories: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    character_id: int | None = None,
+) -> list[str]:
+    """Costruisce fatti che il personaggio corrente è autorizzato a conoscere.
+
+    La continuità è volutamente separata per personaggio. Se viene fornito
+    character_id, qualsiasi memoria/evento con un proprietario diverso viene
+    scartato prima di entrare nel prompt AI.
+    """
     facts: list[str] = []
 
     for memory in memories:
-        content = memory.get("content") if isinstance(memory, dict) else None
-        if isinstance(content, str) and content.strip():
-            facts.append(f"MEMORIA: {content.strip()}")
+        if not isinstance(memory, dict):
+            continue
+        if character_id is not None and not _belongs_to_character(memory, character_id):
+            continue
+        content = _clean_text(memory.get("content"))
+        if content:
+            facts.append(f"MEMORIA DEL PERSONAGGIO CORRENTE: {content}")
 
     for event in events:
         if not isinstance(event, dict):
             continue
+        if character_id is not None and not _belongs_to_character(event, character_id):
+            continue
+
         payload = event.get("payload", {})
         if not isinstance(payload, dict):
             continue
 
-        player = payload.get("player")
-        character = payload.get("character")
-        if isinstance(player, str) and player.strip():
-            facts.append(f"EVENTO - Il giocatore ha detto: {player.strip()}")
-        if isinstance(character, str) and character.strip():
-            facts.append(f"EVENTO - {character.strip()}")
+        player = _clean_text(payload.get("player"))
+        character = _clean_text(payload.get("character"))
+        if player:
+            facts.append(f"EVENTO DEL PERSONAGGIO CORRENTE - Il PLAYER ha detto: {player}")
+        if character:
+            facts.append(f"EVENTO DEL PERSONAGGIO CORRENTE - Risposta di questo personaggio: {character}")
 
         actions = payload.get("actions", [])
-        if isinstance(actions, list):
-            for action in actions:
-                if not isinstance(action, dict):
-                    continue
-                action_type = action.get("type")
-                if action_type == "world_action":
-                    facts.append(f"EVENTO - Azione del personaggio: {action}")
-                elif action_type == "relationship_change":
-                    facts.append(f"EVENTO - Cambiamento relazione: {action}")
-                elif action_type == "create_memory":
-                    content = action.get("content")
-                    if isinstance(content, str) and content.strip():
-                        facts.append(f"EVENTO - Memoria creata: {content.strip()}")
+        if not isinstance(actions, list):
+            continue
 
-    # Evita di gonfiare inutilmente il prompt mantenendo l'ordine cronologico.
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_type = action.get("type")
+            if action_type == "world_action":
+                facts.append(
+                    "EVENTO DEL PERSONAGGIO CORRENTE - Azione del personaggio: "
+                    f"{action}"
+                )
+            elif action_type == "relationship_change":
+                facts.append(
+                    "EVENTO DEL PERSONAGGIO CORRENTE - Cambiamento relazione: "
+                    f"{action}"
+                )
+            elif action_type == "create_memory":
+                content = _clean_text(action.get("content"))
+                if content:
+                    facts.append(
+                        "EVENTO DEL PERSONAGGIO CORRENTE - Memoria creata: "
+                        f"{content}"
+                    )
+
+    # Mantiene l'ordine cronologico e limita il prompt.
     return facts[-80:]
