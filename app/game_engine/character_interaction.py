@@ -64,6 +64,37 @@ def _explicit_memory(player_input: str, character_name: str) -> str | None:
     return f"Il PLAYER ha chiesto a {character_name} di ricordare: {fact}" if fact else None
 
 
+def _player_reference_hint(player_input: str) -> str:
+    """Aggiunge al prompt AI una risoluzione deterministica delle forme in prima persona.
+
+    Serve a impedire che il modello trasformi frasi del PLAYER come
+    "Sai dove sono nato?" in domande sulla nascita del CURRENT_CHARACTER.
+    Il testo originale non viene modificato nel log o nella memoria: l'hint
+    viene usato esclusivamente come istruzione interna per il modello.
+    """
+    text = " ".join(player_input.strip().split()).lower()
+    first_person_markers = (
+        " io ", "sono nato", "sono nata", "sono cresciuto", "sono cresciuta",
+        "ero ", "avevo ", "ho ", "vivevo ", "abitavo ", "venivo ",
+        "mi chiamo", "mio ", "mia ", "miei ", "mie ", "me ", "mi ",
+    )
+    padded = f" {text} "
+    if not any(marker in padded for marker in first_person_markers):
+        return player_input
+
+    return (
+        f"{player_input}\n\n"
+        "[ENGINE — RISOLUZIONE DEI RIFERIMENTI]\n"
+        "Le forme in prima persona presenti nel messaggio appartengono al PLAYER, non al CURRENT_CHARACTER. "
+        "In particolare, espressioni come 'sono nato', 'sono nata', 'sono cresciuto', 'vivevo', 'ero', "
+        "'avevo', 'ho fatto', 'mio', 'mia', 'miei' e 'mie' si riferiscono al PLAYER. "
+        "Quindi una domanda come 'Sai dove sono nato?' significa 'Sai dove è nato il PLAYER?'. "
+        "NON interpretarla come una domanda sulla nascita del CURRENT_CHARACTER. "
+        "Cerca la risposta nelle informazioni che il PLAYER ha comunicato a questo personaggio. "
+        "Non trasferire mai un fatto del PLAYER all'identità del CURRENT_CHARACTER."
+    )
+
+
 def _persistent_relationships(character_id: int, character_ids: list[int]) -> list[dict]:
     """Rende disponibili al modello solo relazioni persistenti del personaggio corrente."""
     for target_id in character_ids:
@@ -141,7 +172,9 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if any(m.get("character_id") != character_id for m in context.get("memories", [])): raise ValueError("Il contesto contiene una memoria appartenente a un altro personaggio.")
     if any(e.get("character_id") != character_id for e in context.get("recent_events", [])): raise ValueError("Il contesto contiene un evento appartenente a un altro personaggio.")
 
-    raw_result = ask_character(context, player_input.strip())
+    original_player_input = player_input.strip()
+    ai_player_input = _player_reference_hint(original_player_input)
+    raw_result = ask_character(context, ai_player_input)
     try: result = json.loads(raw_result)
     except (TypeError, json.JSONDecodeError) as error: raise ValueError("Il game engine ha ricevuto una risposta AI non valida. " f"Risposta ricevuta: {str(raw_result)[:500]}") from error
     if not isinstance(result, dict): raise ValueError("La risposta del game engine deve essere un oggetto JSON. " f"Risposta ricevuta: {str(raw_result)[:500]}")
@@ -149,20 +182,20 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if not isinstance(narration, str) or not narration.strip(): raise ValueError("La risposta AI non contiene una narration valida. " f"Risposta ricevuta: {str(raw_result)[:1000]}")
     if not isinstance(actions, list): raise ValueError("Le azioni del game engine non sono valide. " f"Risposta ricevuta: {str(raw_result)[:1000]}")
 
-    explicit_memory = _explicit_memory(player_input.strip(), character["identity"].name)
+    explicit_memory = _explicit_memory(original_player_input, character["identity"].name)
     if explicit_memory and not any(isinstance(a, dict) and a.get("type") == "create_memory" and a.get("character_id") == character_id for a in actions):
         actions.append({"type": "create_memory", "character_id": character_id, "content": explicit_memory, "memory_type": "fatto_personale", "importance": 8, "secret": False})
 
     validated_actions = validate_actions(actions, context)
     reaction = next(a for a in validated_actions if a["type"] == "character_reaction")
     execution = execute_actions(character_id, validated_actions)
-    event_id = create_event(character_id, "character_interaction", {"player": player_input.strip(), "character": narration.strip(), "actions": validated_actions})
+    event_id = create_event(character_id, "character_interaction", {"player": original_player_input, "character": narration.strip(), "actions": validated_actions})
 
     character = get_character(character_id)
     if character is None: raise ValueError(f"Personaggio con ID {character_id} non trovato.")
     extra = character.get("extra", {})
     if not isinstance(extra, dict): extra = {}
-    conversation = conversation + [{"role": "user", "content": player_input.strip()}, {"role": "assistant", "content": narration.strip()}]
+    conversation = conversation + [{"role": "user", "content": original_player_input}, {"role": "assistant", "content": narration.strip()}]
     extra["conversation"] = conversation[-100:]
     _save_extra(character, extra)
     created_memory_ids = execution.get("created_memory_ids", [])
