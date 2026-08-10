@@ -51,6 +51,18 @@ class SettlementConditions:
         self.development += max(-1.0, min(1.0, (self.prosperity - 50.0) / 50.0)) * 0.5
         self.normalize()
 
+    def apply_security_state(self, *, security: float, crime: float, unrest: float) -> None:
+        """Feed the security subsystem back into settlement conditions."""
+        security = _clamp(security)
+        crime = _clamp(crime)
+        unrest = _clamp(unrest)
+
+        self.security = security
+        self.happiness += (security - 50.0) * 0.08 - (crime - 20.0) * 0.04 - unrest * 0.03
+        self.stability += (security - 50.0) * 0.05 - unrest * 0.04
+        self.prosperity += (security - 50.0) * 0.025 - crime * 0.015
+        self.normalize()
+
     def overall(self) -> float:
         return _clamp(self.prosperity * 0.20 + self.stability * 0.20 + self.security * 0.15 + self.health * 0.20 + self.happiness * 0.15 + self.development * 0.10)
 
