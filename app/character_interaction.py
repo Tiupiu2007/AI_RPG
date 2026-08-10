@@ -24,16 +24,61 @@ def _identity_dict(identity):
 
 
 def _player_context(extra):
+    """Espone al modello solo l'identità del PLAYER, mai il suo contenitore extra."""
     player_id = extra.get("player_id")
     player = extra.get("player")
     if not isinstance(player, dict):
         player = {}
+    identity = {
+        key: player.get(key)
+        for key in (
+            "id", "name", "surname", "nickname", "age", "birth_date",
+            "sex", "race", "physical_description", "appearance",
+        )
+        if key in player
+    }
+    if "id" not in identity and isinstance(player_id, int) and not isinstance(player_id, bool):
+        identity["id"] = player_id
     return {
-        "id": player_id if isinstance(player_id, int) else None,
+        "id": player_id if isinstance(player_id, int) and not isinstance(player_id, bool) else None,
         "name": player.get("name"),
-        "identity": player,
+        "identity": identity,
         "role": "PLAYER",
     }
+
+
+def _safe_character_list(value):
+    """Riduce gli altri personaggi a metadati pubblici, impedendo leakage di memoria."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        safe = {}
+        for key in ("id", "character_id", "name", "surname", "nickname", "role"):
+            if key in item:
+                safe[key] = item[key]
+        if safe:
+            result.append(safe)
+    return result
+
+
+def _safe_relationships(value):
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        safe = {
+            key: item[key]
+            for key in ("character_id", "trust", "affection", "respect", "hostility")
+            if key in item
+        }
+        if safe:
+            result.append(safe)
+    return result
 
 
 def _character_conversation(extra):
@@ -41,7 +86,6 @@ def _character_conversation(extra):
     conversation = extra.get("conversation", []) if isinstance(extra, dict) else []
     if not isinstance(conversation, list):
         return []
-
     cleaned = []
     for item in conversation:
         if not isinstance(item, dict):
@@ -71,27 +115,17 @@ def build_character_context(character_id, recent_conversation=None):
         value = extra.get(key, [])
         return value if isinstance(value, list) else []
 
-    # La cronologia appartiene al personaggio. Non usiamo una cronologia
-    # ricevuta dal frontend come fallback: potrebbe provenire da un altro NPC.
     stored_conversation = _character_conversation(extra)
 
-    memories = get_character_memories(character_id, limit=20, include_secrets=True)
     memories = [
-        memory for memory in memories
+        memory for memory in get_character_memories(character_id, limit=20, include_secrets=True)
         if isinstance(memory, dict) and memory.get("character_id") == character_id
     ]
-
-    events = get_recent_events(character_id, limit=20)
     events = [
-        event for event in events
+        event for event in get_recent_events(character_id, limit=20)
         if isinstance(event, dict) and event.get("character_id") == character_id
     ]
-
-    continuity_facts = build_continuity_facts(
-        memories,
-        events,
-        character_id=character_id,
-    )
+    continuity_facts = build_continuity_facts(memories, events, character_id=character_id)
 
     return {
         "context_scope": {
@@ -122,13 +156,13 @@ def build_character_context(character_id, recent_conversation=None):
         },
         "state": extra.get("state", {}) if isinstance(extra.get("state", {}), dict) else {},
         "memories": memories,
-        "relationships": list_value("relationships"),
-        "characters_present": list_value("characters_present"),
+        "relationships": _safe_relationships(extra.get("relationships", [])),
+        "characters_present": _safe_character_list(extra.get("characters_present", [])),
         "scene": {
             "player": _player_context(extra),
             "reacting_character_id": character_id,
             "player_id": extra.get("player_id"),
-            "involved_characters": list_value("involved_characters"),
+            "involved_characters": _safe_character_list(extra.get("involved_characters", [])),
             "available_location_ids": list_value("available_location_ids"),
         },
         "recent_conversation": stored_conversation,
@@ -174,15 +208,13 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if character is None:
         raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
-    # Il backend è la fonte autorevole della cronologia. Il parametro
-    # recent_conversation resta accettato per compatibilità API, ma non può
-    # introdurre dati di un altro personaggio.
+    # La cronologia del frontend non è autorevole e non viene mai usata per il prompt.
+    # Rimane nel parametro solo per compatibilità con vecchie versioni dell'API.
     conversation = get_character_conversation(character_id)
     context = build_character_context(character_id)
 
-    # Controllo finale: il contesto passato al provider deve appartenere
-    # esclusivamente al personaggio richiesto.
-    if context.get("context_scope", {}).get("character_id") != character_id:
+    scope = context.get("context_scope", {})
+    if scope.get("character_id") != character_id:
         raise ValueError("Contesto personaggio incoerente.")
     if any(memory.get("character_id") != character_id for memory in context.get("memories", [])):
         raise ValueError("Il contesto contiene una memoria appartenente a un altro personaggio.")
