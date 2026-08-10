@@ -9,6 +9,7 @@ import uuid
 
 from .biomes import BiomeMap
 from .environment import EnvironmentConditions, EnvironmentEngine, day_of_year
+from .factions import Faction, FactionMap
 from .geography import Geography, Route
 from .locations import Location
 from .positions import ActorPosition
@@ -29,8 +30,8 @@ class WorldState:
     settlements: SettlementMap = field(default_factory=SettlementMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
     environment: EnvironmentEngine = field(default_factory=EnvironmentEngine)
+    factions: FactionMap = field(default_factory=FactionMap)
     actor_positions: dict[str, ActorPosition] = field(default_factory=dict)
-    factions: dict[str, Any] = field(default_factory=dict)
     events: dict[str, Any] = field(default_factory=dict)
     conditions: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -91,6 +92,9 @@ class WorldState:
         for region in self.regions.regions.values():
             if location_id in region.location_ids:
                 region.location_ids.remove(location_id)
+        for faction in self.factions.factions.values():
+            if location_id in faction.controlled_location_ids:
+                faction.controlled_location_ids.remove(location_id)
         del self.locations[location_id]
         self.update()
         return location
@@ -206,6 +210,57 @@ class WorldState:
             raise ValueError("La località non possiede coordinate.")
         return self.environment_at(location.coordinates, latitude=latitude, altitude=altitude, biome=self.biome_at_location(location_id))
 
+    def add_faction(self, faction: Faction) -> None:
+        self.factions.add(faction)
+        self.update()
+
+    def get_faction(self, faction_id: str) -> Faction | None:
+        return self.factions.get(faction_id)
+
+    def remove_faction(self, faction_id: str) -> Faction | None:
+        faction = self.factions.remove(faction_id)
+        if faction is not None:
+            self.update()
+        return faction
+
+    def set_faction_relation(self, first_id: str, second_id: str, value: float) -> None:
+        if first_id not in self.factions.factions or second_id not in self.factions.factions:
+            raise KeyError("Entrambe le fazioni devono esistere.")
+        self.factions.factions[first_id].set_relation(second_id, value)
+        self.factions.factions[second_id].set_relation(first_id, value)
+        self.update()
+
+    def set_faction_region_control(self, faction_id: str, region_id: str) -> None:
+        if faction_id not in self.factions.factions:
+            raise KeyError(f"Fazione non trovata: {faction_id}")
+        if region_id not in self.regions.regions:
+            raise KeyError(f"Regione non trovata: {region_id}")
+        self.factions.factions[faction_id].control_region(region_id)
+        self.update()
+
+    def set_faction_location_control(self, faction_id: str, location_id: str) -> None:
+        self.require_location(location_id)
+        if faction_id not in self.factions.factions:
+            raise KeyError(f"Fazione non trovata: {faction_id}")
+        self.factions.factions[faction_id].control_location(location_id)
+        self.update()
+
+    def factions_controlling_region(self, region_id: str) -> list[Faction]:
+        if region_id not in self.regions.regions:
+            raise KeyError(f"Regione non trovata: {region_id}")
+        return self.factions.factions_controlling_region(region_id)
+
+    def factions_controlling_location(self, location_id: str) -> list[Faction]:
+        self.require_location(location_id)
+        return self.factions.factions_controlling_location(location_id)
+
+    def set_faction_influence(self, faction_id: str, area_id: str, value: float) -> None:
+        faction = self.factions.get(faction_id)
+        if faction is None:
+            raise KeyError(f"Fazione non trovata: {faction_id}")
+        faction.set_influence(area_id, value)
+        self.update()
+
     def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
         self.require_location(location_id)
         if not isinstance(actor_id, str) or not actor_id.strip():
@@ -243,7 +298,7 @@ class WorldState:
         return position
 
     def to_dict(self) -> dict[str, Any]:
-        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "environment": {"seed": self.environment.seed}, "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "factions": self.factions, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "environment": {"seed": self.environment.seed}, "factions": self.factions.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -265,14 +320,16 @@ class WorldState:
         clock = WorldClock.from_dict(data.get("clock", {})) if isinstance(data.get("clock", {}), dict) else WorldClock.create()
         environment_data = data.get("environment", {}) if isinstance(data.get("environment", {}), dict) else {}
         environment = EnvironmentEngine(seed=int(environment_data.get("seed", 0)))
+        factions = FactionMap.from_dict(data.get("factions", {})) if isinstance(data.get("factions", {}), dict) else FactionMap()
         actor_positions: dict[str, ActorPosition] = {}
         for raw in (data.get("actor_positions", {}) if isinstance(data.get("actor_positions", {}), dict) else {}).values():
             position = raw if isinstance(raw, ActorPosition) else ActorPosition.from_dict(raw)
             actor_positions[position.actor_id] = position
-        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, settlements=settlements, clock=clock, environment=environment, actor_positions=actor_positions, factions=_dict_or_empty(data.get("factions")), events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
+        world = cls(world_id=world_id, name=name, description=_string_or_empty(data.get("description")), locations=locations, geography=geography, biomes=biomes, regions=regions, settlements=settlements, clock=clock, environment=environment, factions=factions, actor_positions=actor_positions, events=_dict_or_empty(data.get("events")), conditions=_dict_or_empty(data.get("conditions")), metadata=_dict_or_empty(data.get("metadata")), updated_at=_string_or_empty(data.get("updated_at")) or _utc_now())
         world._validate_geography()
         world._validate_actor_positions()
         world._validate_settlements()
+        world._validate_factions()
         return world
 
     def _validate_geography(self) -> None:
@@ -304,6 +361,13 @@ class WorldState:
                 invalid.append(settlement_id)
         for settlement_id in invalid:
             del self.settlements.settlements[settlement_id]
+
+    def _validate_factions(self) -> None:
+        for faction in self.factions.factions.values():
+            faction.controlled_region_ids = [rid for rid in faction.controlled_region_ids if rid in self.regions.regions]
+            faction.controlled_location_ids = [lid for lid in faction.controlled_location_ids if lid in self.locations]
+            faction.member_ids = [mid for mid in faction.member_ids if isinstance(mid, str) and mid.strip()]
+            faction.relations = {fid: value for fid, value in faction.relations.items() if fid in self.factions.factions and fid != faction.faction_id}
 
 
 def _utc_now() -> str:
