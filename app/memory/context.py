@@ -21,11 +21,7 @@ def build_continuity_facts(
     events: list[dict[str, Any]],
     character_id: int,
 ) -> list[str]:
-    """Costruisce fatti persistenti esclusivamente per ``character_id``.
-
-    Il proprietario è obbligatorio: senza un character_id non è possibile
-    stabilire a quale NPC appartenga un ricordo o un evento.
-    """
+    """Costruisce fatti persistenti esclusivamente per ``character_id``."""
     if not isinstance(character_id, int) or isinstance(character_id, bool):
         raise ValueError("build_continuity_facts richiede un character_id valido.")
 
@@ -60,24 +56,14 @@ def build_continuity_facts(
         for action in actions:
             if not isinstance(action, dict):
                 continue
-
             action_type = action.get("type")
             if action_type == "world_action":
-                facts.append(
-                    "EVENTO DEL PERSONAGGIO CORRENTE - Azione del personaggio: "
-                    f"{action}"
-                )
+                facts.append("EVENTO DEL PERSONAGGIO CORRENTE - Azione del personaggio: " f"{action}")
             elif action_type == "relationship_change":
-                facts.append(
-                    "EVENTO DEL PERSONAGGIO CORRENTE - Cambiamento relazione: "
-                    f"{action}"
-                )
+                facts.append("EVENTO DEL PERSONAGGIO CORRENTE - Cambiamento relazione: " f"{action}")
             elif action_type == "create_memory":
                 content = _clean_text(action.get("content"))
                 if content:
-                    facts.append(
-                        "EVENTO DEL PERSONAGGIO CORRENTE - Memoria creata: "
-                        f"{content}"
-                    )
+                    facts.append("EVENTO DEL PERSONAGGIO CORRENTE - Memoria creata: " f"{content}")
 
     return facts[-80:]
