@@ -1,21 +1,17 @@
 import json
 
 from app.ai_provider import ask_character
-from app.database.characters_db import get_character
+from app.database.characters_db import get_character, save_character
+from app.game_engine.action_executor import execute_actions
+from app.game_engine.action_validator import validate_actions
 
 
 def _identity_dict(identity):
     return {
-        "id": None,
-        "name": identity.name,
-        "surname": identity.surname,
-        "nickname": identity.nickname,
-        "age": identity.age,
-        "birth_date": identity.birth_date,
-        "sex": identity.sex,
-        "race": identity.race,
-        "physical_description": identity.physical_description,
-        "appearance": identity.appearance,
+        "id": None, "name": identity.name, "surname": identity.surname,
+        "nickname": identity.nickname, "age": identity.age,
+        "birth_date": identity.birth_date, "sex": identity.sex, "race": identity.race,
+        "physical_description": identity.physical_description, "appearance": identity.appearance,
     }
 
 
@@ -30,58 +26,79 @@ def build_character_context(character_id, recent_conversation=None):
     if not isinstance(extra, dict):
         extra = {}
 
-    state = extra.get("state", {})
-    if not isinstance(state, dict):
-        state = {}
+    def list_value(key):
+        value = extra.get(key, [])
+        return value if isinstance(value, list) else []
 
-    memories = extra.get("memories", [])
-    if not isinstance(memories, list):
-        memories = []
-
-    relationships = extra.get("relationships", [])
-    if not isinstance(relationships, list):
-        relationships = []
-
-    recent_events = extra.get("recent_events", [])
-    if not isinstance(recent_events, list):
-        recent_events = []
-
-    if not isinstance(recent_conversation, list):
-        recent_conversation = []
-
-    character = {
-        **identity,
-        "psychology": extra.get("psychology", {}),
-        "personality": extra.get("personality", {}),
-        "statistics": extra.get("statistics", {}),
-        "abilities": extra.get("abilities", []),
-        "skills": extra.get("skills", []),
-        "conditions": extra.get("conditions", {}),
-        "inventory": extra.get("inventory", {}),
-        "magic": extra.get("magic", {}),
-    }
+    stored_conversation = list_value("conversation")
+    if not stored_conversation and isinstance(recent_conversation, list):
+        stored_conversation = recent_conversation
 
     return {
-        "character": character,
-        "state": state,
-        "memories": memories,
-        "relationships": relationships,
-        "characters_present": extra.get("characters_present", []),
+        "character": {
+            **identity,
+            "psychology": extra.get("psychology", {}),
+            "personality": extra.get("personality", {}),
+            "statistics": extra.get("statistics", {}),
+            "abilities": extra.get("abilities", []),
+            "skills": extra.get("skills", []),
+            "conditions": extra.get("conditions", {}),
+            "inventory": extra.get("inventory", {}),
+            "magic": extra.get("magic", {}),
+        },
+        "state": extra.get("state", {}) if isinstance(extra.get("state", {}), dict) else {},
+        "memories": list_value("memories"),
+        "relationships": list_value("relationships"),
+        "characters_present": list_value("characters_present"),
         "scene": {
             "player": extra.get("player"),
             "reacting_character_id": character_id,
             "player_id": extra.get("player_id"),
-            "involved_characters": extra.get("involved_characters", []),
+            "involved_characters": list_value("involved_characters"),
+            "available_location_ids": list_value("available_location_ids"),
         },
-        "recent_conversation": recent_conversation[-16:],
-        "recent_events": recent_events[-16:],
+        "recent_conversation": stored_conversation[-16:],
+        "recent_events": list_value("recent_events")[-16:],
     }
 
 
-def process_character_turn(character_id, player_input, recent_conversation=None):
-    context = build_character_context(character_id, recent_conversation)
-    raw_result = ask_character(context, player_input)
+def _save_extra(character, extra):
+    save_character(
+        character["identity"], character["languages"],
+        extra_data=extra, character_id=character["id"],
+    )
 
+
+def get_character_conversation(character_id):
+    character = get_character(character_id)
+    if character is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato.")
+    extra = character.get("extra", {})
+    conversation = extra.get("conversation", []) if isinstance(extra, dict) else []
+    return conversation if isinstance(conversation, list) else []
+
+
+def clear_character_conversation(character_id):
+    character = get_character(character_id)
+    if character is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato.")
+    extra = character.get("extra", {})
+    if not isinstance(extra, dict):
+        extra = {}
+    extra["conversation"] = []
+    _save_extra(character, extra)
+
+
+def process_character_turn(character_id, player_input, recent_conversation=None):
+    if not isinstance(player_input, str) or not player_input.strip():
+        raise ValueError("Il messaggio non può essere vuoto.")
+
+    conversation = get_character_conversation(character_id)
+    if not conversation and isinstance(recent_conversation, list):
+        conversation = recent_conversation[-16:]
+
+    context = build_character_context(character_id, conversation)
+    raw_result = ask_character(context, player_input.strip())
     try:
         result = json.loads(raw_result)
     except (TypeError, json.JSONDecodeError) as error:
@@ -90,25 +107,34 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if not isinstance(result, dict):
         raise ValueError("La risposta del game engine deve essere un oggetto JSON.")
 
-    actions = result.get("actions", [])
+    narration = result.get("narration")
+    actions = result.get("actions")
+    if not isinstance(narration, str) or not narration.strip():
+        raise ValueError("La risposta AI non contiene una narration valida.")
     if not isinstance(actions, list):
         raise ValueError("Le azioni del game engine non sono valide.")
 
-    reaction = next(
-        (
-            action for action in actions
-            if isinstance(action, dict)
-            and action.get("type") == "character_reaction"
-            and action.get("character_id") == character_id
-        ),
-        None,
-    )
+    validated_actions = validate_actions(actions, context)
+    reaction = next(a for a in validated_actions if a["type"] == "character_reaction")
+    execution = execute_actions(character_id, validated_actions)
 
-    if reaction is None:
-        raise ValueError("Il game engine non ha prodotto una character_reaction valida.")
+    character = get_character(character_id)
+    if character is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato.")
+    extra = character.get("extra", {})
+    if not isinstance(extra, dict):
+        extra = {}
+    conversation = conversation + [
+        {"role": "user", "content": player_input.strip()},
+        {"role": "assistant", "content": narration.strip()},
+    ]
+    extra["conversation"] = conversation[-100:]
+    _save_extra(character, extra)
 
     return {
-        "narration": str(result.get("narration", "")).strip(),
+        "narration": narration.strip(),
         "character_reaction": reaction,
-        "actions": actions,
+        "actions": validated_actions,
+        "executed_actions": execution["executed_actions"],
+        "conversation": conversation[-16:],
     }
