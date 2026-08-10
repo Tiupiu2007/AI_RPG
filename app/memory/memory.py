@@ -19,6 +19,7 @@ def create_memory(
     secret: bool = False,
     source_event_id: int | None = None,
 ) -> int:
+    """Salva una memoria persistente senza creare duplicati identici."""
     if not isinstance(character_id, int) or isinstance(character_id, bool):
         raise ValueError("character_id non valido.")
     if not isinstance(content, str) or not content.strip():
@@ -26,8 +27,26 @@ def create_memory(
     if not 1 <= int(importance) <= 10:
         raise ValueError("importance deve essere compreso tra 1 e 10.")
 
+    content = " ".join(content.strip().split())
+    memory_type = str(memory_type or "evento").strip() or "evento"
+
     connection = get_connection()
     try:
+        # La stessa informazione non deve essere salvata più volte solo perché
+        # è stata rilevata da eventi o turni diversi.
+        existing = connection.execute(
+            """
+            SELECT id
+            FROM memories
+            WHERE character_id = ? AND memory_type = ? AND content = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (character_id, memory_type, content),
+        ).fetchone()
+        if existing is not None:
+            return int(existing["id"])
+
         cursor = connection.execute(
             """
             INSERT INTO memories (
@@ -37,8 +56,8 @@ def create_memory(
             """,
             (
                 character_id,
-                str(memory_type or "evento"),
-                content.strip(),
+                memory_type,
+                content,
                 int(importance),
                 1 if secret else 0,
                 source_event_id,
@@ -53,10 +72,11 @@ def create_memory(
 
 def get_character_memories(
     character_id: int,
-    limit: int = 30,
+    limit: int = 20,
     include_secrets: bool = True,
 ) -> list[dict[str, Any]]:
-    limit = max(1, min(int(limit), 200))
+    """Restituisce poche memorie utili, privilegiando importanza e recenza."""
+    limit = max(1, min(int(limit), 100))
     secret_clause = "" if include_secrets else "AND secret = 0"
     connection = get_connection()
     try:
