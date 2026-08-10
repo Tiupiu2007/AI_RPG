@@ -54,7 +54,6 @@ def init_database() -> None:
             )
         """)
 
-        # Memoria persistente: non viene più conservata dentro extra_data.
         connection.execute("""
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +73,6 @@ def init_database() -> None:
             ON memories(character_id, importance DESC, created_at DESC)
         """)
 
-        # Eventi persistenti: ogni turno realmente concluso lascia una traccia.
         connection.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +87,27 @@ def init_database() -> None:
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_events_character_id
             ON events(character_id, id DESC)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS relationships (
+                character_a_id INTEGER NOT NULL,
+                character_b_id INTEGER NOT NULL,
+                trust INTEGER NOT NULL DEFAULT 0 CHECK (trust BETWEEN -100 AND 100),
+                affection INTEGER NOT NULL DEFAULT 0 CHECK (affection BETWEEN -100 AND 100),
+                respect INTEGER NOT NULL DEFAULT 0 CHECK (respect BETWEEN -100 AND 100),
+                hostility INTEGER NOT NULL DEFAULT 0 CHECK (hostility BETWEEN -100 AND 100),
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (character_a_id, character_b_id),
+                FOREIGN KEY (character_a_id) REFERENCES characters(id) ON DELETE CASCADE,
+                FOREIGN KEY (character_b_id) REFERENCES characters(id) ON DELETE CASCADE,
+                CHECK (character_a_id != character_b_id)
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_relationships_character_b
+            ON relationships(character_b_id)
         """)
 
         connection.commit()
@@ -239,10 +258,8 @@ def save_character(identity: CharacterIdentity, languages: list[CharacterLanguag
 
 
 def save_character_model(character: Character, character_id: int | None = None) -> int:
-    """Persist the complete modular Character without changing the existing schema."""
     if not isinstance(character, Character):
         raise TypeError("character deve essere un Character.")
-
     payload: dict[str, Any] = dict(character.extra)
     payload["inventory"] = character.inventory.to_dict()
     payload["money"] = character.money.to_dict()
