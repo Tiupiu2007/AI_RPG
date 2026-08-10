@@ -49,8 +49,6 @@ def build_character_context(character_id, recent_conversation=None):
     if not stored_conversation and isinstance(recent_conversation, list):
         stored_conversation = recent_conversation
 
-    # Memoria persistente: poche informazioni importanti, non il registro completo.
-    # La conversazione recente e gli eventi coprono invece il contesto momentaneo.
     memories = get_character_memories(character_id, limit=20, include_secrets=True)
     events = get_recent_events(character_id, limit=20)
     continuity_facts = build_continuity_facts(memories, events)
@@ -189,8 +187,6 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     extra["conversation"] = conversation[-100:]
     _save_extra(character, extra)
 
-    # Le memorie create dalle azioni vengono restituite al frontend, mentre
-    # restano persistenti nel database e saranno ricaricate al turno successivo.
     created_memory_ids = execution.get("created_memory_ids", [])
     if not isinstance(created_memory_ids, list):
         created_memory_ids = []
