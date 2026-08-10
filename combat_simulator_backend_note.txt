@@ -1,0 +1,1 @@
+Combat simulator backend requires a POST /api/combat/simulate route that imports app.game_engine.combat_simulator.simulate_combat and returns its JSON result. This file is a temporary implementation marker until the existing server entrypoint is wired without guessing its framework or route structure.
