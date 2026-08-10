@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI RPG - Simulatore di scontro</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+body{margin:0;background:#0b0d12;color:#e9edf5;font-family:Arial,sans-serif}.combat-app{max-width:1100px;margin:auto;padding:40px}.combat-header{display:flex;justify-content:space-between;align-items:end;margin-bottom:30px}.eyebrow{font-size:12px;letter-spacing:3px;color:#8b95a7}.combat-header h1{margin:8px 0;font-size:36px}.selectors{display:grid;grid-template-columns:1fr 80px 1fr;gap:20px;align-items:center}.card{background:#121620;border:1px solid #252c3a;border-radius:14px;padding:24px}.card h2{margin-top:0}.card select{width:100%;padding:14px;background:#0b0f17;color:#fff;border:1px solid #30394b;border-radius:8px}.vs{text-align:center;font-size:28px;font-weight:bold;color:#aeb7c8}.actions{margin:25px 0;display:flex;gap:12px}.button{padding:13px 20px;border:0;border-radius:8px;cursor:pointer;font-weight:bold}.primary{background:#e7ebf2;color:#10131a}.secondary{background:#242b38;color:#fff}.arena{min-height:300px;white-space:pre-wrap;line-height:1.7;background:#0f131b;border:1px solid #252c3a;border-radius:14px;padding:28px}.status{text-align:center;color:#909bad;margin:15px}.hidden{display:none}@media(max-width:700px){.selectors{grid-template-columns:1fr}.vs{padding:0}.combat-app{padding:20px}}
+</style>
+</head>
+<body>
+<main class="combat-app">
+<header class="combat-header"><div><div class="eyebrow">AI RPG</div><h1>Simulatore di scontro</h1><div class="eyebrow">SIMULAZIONE NON PERSISTENTE</div></div><a href="index.html" class="button secondary">← Personaggi</a></header>
+<section class="selectors">
+<div class="card"><h2>Personaggio A</h2><select id="characterA"><option value="">Seleziona personaggio</option></select></div>
+<div class="vs">VS</div>
+<div class="card"><h2>Personaggio B</h2><select id="characterB"><option value="">Seleziona personaggio</option></select></div>
+</section>
+<div class="actions"><button id="simulateButton" class="button primary">⚔ Simula scontro</button><button id="clearButton" class="button secondary">Pulisci</button></div>
+<div id="status" class="status">Seleziona due personaggi.</div>
+<section id="arena" class="arena hidden"></section>
+</main>
+<script type="module" src="js/combat-simulator.js"></script>
+</body>
+</html>
