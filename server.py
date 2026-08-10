@@ -25,6 +25,7 @@ from app.database.characters_db import (
     get_all_identities,
     delete_character,
 )
+from app.memory.memory import reset_character_history
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -287,6 +288,15 @@ class RPGServer(BaseHTTPRequestHandler):
                 json_response(self, result)
                 return
 
+            if request_path == "/api/character-history/reset":
+                data = self.read_json()
+                character_id = int(data.get("character_id"))
+                clear_relationships = bool(data.get("clear_relationships", False))
+                result = reset_character_history(character_id, clear_relationships=clear_relationships)
+                print(f"[DATABASE] Cronologia personaggio resettata: ID {character_id} -> {result}")
+                json_response(self, {"success": True, "id": character_id, **result})
+                return
+
             if request_path == "/api/characters":
                 data = self.read_json()
                 identity = identity_from_dict(data.get("identity", data))
@@ -333,7 +343,6 @@ class RPGServer(BaseHTTPRequestHandler):
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
-            print("[SERVER ERROR]", error)
             json_response(self, {"error": str(error)}, 500)
 
     def read_json(self):
