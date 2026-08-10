@@ -3,11 +3,11 @@ from pathlib import Path
 import json
 import mimetypes
 import random
-import sys
 import hashlib
 
 from app.ai_provider import ask_character, MODEL_NAME
 from app.character_interaction import process_character_turn
+from app.battle import simulate_battle
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
 from app.characters.character_from_description import generate_character_from_description
@@ -272,6 +272,15 @@ class RPGServer(BaseHTTPRequestHandler):
                 source = data.get("source", "system")
                 importance = data.get("importance", "major")
                 json_response(self, generate_character(description, source, importance))
+                return
+
+            if request_path == "/api/battle":
+                data = self.read_json()
+                character_a_id = int(data.get("character_a_id"))
+                character_b_id = int(data.get("character_b_id"))
+                style = str(data.get("style", "cinematico"))
+                result = simulate_battle(character_a_id, character_b_id, style)
+                json_response(self, result)
                 return
 
             if request_path == "/api/character-interaction":
