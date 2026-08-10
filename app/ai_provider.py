@@ -4,19 +4,12 @@ import requests
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen3:30b-a3b-instruct-2507-q4_K_M"
 OLLAMA_TIMEOUT = 120
-TEMPERATURE = 0.75
+TEMPERATURE = 0.8
 NUM_CTX = 16384
 
 
 def ask_ollama(system_prompt, user_prompt):
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-        "stream": False,
-        "format": "json",
-        "think": False,
-        "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
-    }
+    payload = {"model": MODEL_NAME, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "stream": False, "format": "json", "think": False, "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX}}
     try:
         response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
     except requests.RequestException as error:
@@ -38,8 +31,7 @@ def ask_ollama(system_prompt, user_prompt):
 
 def build_ai_context(character_context):
     character = character_context.get("character")
-    if not isinstance(character, dict):
-        raise ValueError("Il contesto non contiene un personaggio valido.")
+    if not isinstance(character, dict): raise ValueError("Il contesto non contiene un personaggio valido.")
     roles = character_context.get("roles", {})
     if not isinstance(roles, dict): roles = {}
     player = roles.get("player", {})
@@ -53,15 +45,19 @@ def build_ai_context(character_context):
     if not isinstance(state, dict): state = {}
     scene = character_context.get("scene", {})
     if not isinstance(scene, dict): scene = {}
-    return {
-        "roles": {"PLAYER": player, "CURRENT_CHARACTER": current_character},
-        "character": character, "state": state,
-        "memories": safe_list("memories"), "relationships": safe_list("relationships"),
-        "characters_present": safe_list("characters_present"),
-        "scene": {"player": player, "reacting_character_id": scene.get("reacting_character_id"), "player_id": scene.get("player_id"), "involved_characters": scene.get("involved_characters", [])},
-        "recent_conversation": safe_list("recent_conversation"), "recent_events": safe_list("recent_events"),
-        "continuity_facts": safe_list("continuity_facts"),
-    }
+    return {"roles": {"PLAYER": player, "CURRENT_CHARACTER": current_character}, "character": character, "state": state, "memories": safe_list("memories"), "relationships": safe_list("relationships"), "characters_present": safe_list("characters_present"), "scene": {"player": player, "reacting_character_id": scene.get("reacting_character_id"), "player_id": scene.get("player_id"), "involved_characters": scene.get("involved_characters", [])}, "recent_conversation": safe_list("recent_conversation"), "recent_events": safe_list("recent_events"), "continuity_facts": safe_list("continuity_facts")}
+
+
+def _recent_narrations(character_context):
+    values = []
+    for item in character_context.get("recent_conversation", []):
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).lower()
+        text = item.get("content", item.get("message", item.get("text", "")))
+        if role in {"assistant", "character", "npc", "current_character"} and isinstance(text, str) and text.strip():
+            values.append(text.strip())
+    return values[-8:]
 
 
 def ask_character(character_context, player_input):
@@ -81,6 +77,8 @@ def ask_character(character_context, player_input):
     player = ai_context["roles"]["PLAYER"]
     player_id = player.get("id")
     player_name = player.get("name") or "Giocatore"
+    recent_narrations = _recent_narrations(character_context)
+    repetition_block = "\n".join(f"- {text}" for text in recent_narrations) if recent_narrations else "(nessuna risposta precedente disponibile)"
 
     system_prompt = f"""
 Sei {character_name}, personaggio di un RPG narrativo persistente.
@@ -95,37 +93,36 @@ SOGGETTI
 Quando il PLAYER usa io/me/mi/ho/sono/ero/facevo/ho fatto, il soggetto è PLAYER.
 Quando il PLAYER usa tu/te/ti/hai/sei/eri/facevi/hai fatto, il referente è CURRENT_CHARACTER.
 Non trasferire mai un fatto da PLAYER a CURRENT_CHARACTER o viceversa.
-Le memorie e gli eventi persistenti non cambiano il soggetto della frase attuale.
 
 CONTINUITÀ
 Memorie, eventi e continuity_facts sono fatti persistenti. Non riscrivere il passato e non inventare fatti mancanti.
 Conosci solo ciò che CURRENT_CHARACTER può conoscere.
-Una conversazione normale può rimanere normale: non aggiungere automaticamente misteri, combattimenti o trama.
+Una conversazione normale deve poter rimanere normale: non aggiungere automaticamente misteri, combattimenti, lore o dramma.
 
-OUTPUT — REGOLA ASSOLUTA
-Devi restituire ESATTAMENTE un singolo oggetto JSON di questo tipo:
+NATURALITÀ E RIPETIZIONI
+La risposta deve reagire PRIMA DI TUTTO al messaggio appena ricevuto.
+Non usare automaticamente il tratto, il potere, il trauma, il ricordo o il simbolo più caratteristico di {character_name} in ogni risposta.
+Un elemento importante del personaggio va richiamato solo quando è realmente pertinente alla frase o alla situazione.
+Evita tormentoni, metafore ricorrenti e formule ripetute.
+Non ripetere la stessa immagine, metafora o concetto presente nelle risposte precedenti se non è necessario.
+Se il PLAYER fa una domanda banale, rispondi in modo banale e naturale.
+Se il PLAYER scherza, puoi scherzare. Se fa una domanda diretta, rispondi alla domanda.
+Non trasformare ogni risposta in una frase poetica o misteriosa.
+
+RISPOSTE PRECEDENTI DA EVITARE COME FORMULAZIONE
+{repetition_block}
+Queste risposte servono come memoria stilistica immediata: NON copiarne frasi, metafore, strutture o concetti ricorrenti senza una ragione narrativa concreta.
+
+OUTPUT
+Restituisci ESATTAMENTE un singolo oggetto JSON:
 {{
   "narration": "risposta parlata di {character_name}",
-  "actions": [
-    {{
-      "type": "character_reaction",
-      "character_id": {character_id},
-      "emotion": "emozione di {character_name}",
-      "thought": "pensiero di {character_name}",
-      "intention": "intenzione di {character_name}",
-      "goal": "{current_goal}"
-    }}
-  ]
+  "actions": [{{"type": "character_reaction", "character_id": {character_id}, "emotion": "emozione", "thought": "pensiero di {character_name}", "intention": "intenzione di {character_name}", "goal": "{current_goal}"}}]
 }}
 
-REGOLE OUTPUT
-- "narration" è OBBLIGATORIA, è una stringa non vuota e contiene la risposta che {character_name} dice al PLAYER.
-- "actions" è OBBLIGATORIO ed è un array.
-- "character_reaction" è OBBLIGATORIA dentro actions e character_id deve essere {character_id}.
-- Non mettere la narration dentro actions.
-- Non restituire un character_reaction come oggetto principale.
-- Non usare markdown o testo fuori dal JSON.
-
+"narration" è obbligatoria, non vuota e contiene la risposta di {character_name} al PLAYER.
+"actions" è obbligatorio. "character_reaction" deve stare dentro actions.
+Non mettere narration dentro actions e non restituire character_reaction come oggetto principale.
 Rispondi esclusivamente con JSON valido.
 """.strip()
 
@@ -136,9 +133,10 @@ CONTESTO AUTOREVOLE DEL GAME ENGINE:
 MESSAGGIO ATTUALE DEL PLAYER:
 {player_input}
 
-Il PLAYER sta parlando con CURRENT_CHARACTER = {character_name}.
-Rispondi direttamente al messaggio. Mantieni la continuità. Non controllare il PLAYER. Non inventare fatti.
-RICORDA: il livello principale DEVE contenere sia "narration" sia "actions". La risposta parlata va in "narration".
+Rispondi direttamente al messaggio attuale del PLAYER come {character_name}.
+La risposta deve essere naturale, pertinente e non ripetitiva.
+Mantieni la continuità senza riportare automaticamente gli stessi temi della risposta precedente.
+Non controllare il PLAYER e non inventare fatti.
 Restituisci esclusivamente il JSON richiesto.
 """.strip()
 
@@ -148,20 +146,16 @@ Restituisci esclusivamente il JSON richiesto.
     except json.JSONDecodeError as error:
         raise ValueError(f"Ollama ha restituito JSON non valido: {response[:1000]}") from error
     if not isinstance(result, dict): raise ValueError("La risposta AI deve essere un oggetto JSON.")
-
-    # Recupero difensivo per modelli che restituiscono la reaction al livello principale.
     narration = result.get("narration")
     if not isinstance(narration, str) or not narration.strip():
         reaction = result.get("character_reaction")
-        if isinstance(reaction, dict):
-            narration = reaction.get("narration")
+        if isinstance(reaction, dict): narration = reaction.get("narration")
     if not isinstance(narration, str) or not narration.strip():
         raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:1000]}")
     actions = result.get("actions")
     if not isinstance(actions, list):
         reaction = result.get("character_reaction")
-        if isinstance(reaction, dict): actions = [reaction]
-        else: actions = []
+        actions = [reaction] if isinstance(reaction, dict) else []
     result["narration"] = narration.strip()
     result["actions"] = actions
     return json.dumps(result, ensure_ascii=False)
