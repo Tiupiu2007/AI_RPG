@@ -334,7 +334,7 @@ class RPGServer(BaseHTTPRequestHandler):
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
             print("[SERVER ERROR]", error)
-            json_response(self, {"error": str(error)}, 500
+            json_response(self, {"error": str(error)}, 500)
 
     def read_json(self):
         content_length = int(self.headers.get("Content-Length", 0))
