@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from app.database.characters_db import get_character, save_character
+from app.memory.memory import create_memory
 
 
 def _extra(character: dict[str, Any]) -> dict[str, Any]:
@@ -50,32 +50,33 @@ def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[st
     if character is None:
         raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
-    extra = _extra(character)
     executed: list[dict[str, Any]] = []
+    created_memory_ids: list[int] = []
 
     for action in actions:
         action_type = action["type"]
+
         if action_type == "character_reaction":
             execute_character_reaction(character_id, action)
             executed.append(action)
-            character = get_character(character_id) or character
-            extra = _extra(character)
             continue
 
+        character = get_character(character_id) or character
+        extra = _extra(character)
+
         if action_type == "create_memory":
-            memories = extra.get("memories", [])
-            if not isinstance(memories, list):
-                memories = []
-            memories.append({
-                "content": action["content"],
-                "memory_type": action.get("memory_type", "evento"),
-                "importance": action["importance"],
-                "secret": action["secret"],
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            extra["memories"] = memories[-200:]
+            memory_id = create_memory(
+                character_id=character_id,
+                content=action["content"],
+                memory_type=action.get("memory_type", "evento"),
+                importance=action["importance"],
+                secret=action["secret"],
+            )
+            created_memory_ids.append(memory_id)
 
         elif action_type == "relationship_change":
+            # Le relazioni verranno spostate in una tabella dedicata nel prossimo
+            # passaggio del game engine. Per ora manteniamo la struttura esistente.
             relationships = extra.get("relationships", [])
             if not isinstance(relationships, list):
                 relationships = []
@@ -91,19 +92,18 @@ def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[st
                 if field in action:
                     relation[field] = max(-100, min(100, int(relation.get(field, 0)) + action[field]))
             extra["relationships"] = relationships
+            _save(character, extra)
 
         elif action_type == "world_action":
-            events = extra.get("recent_events", [])
-            if not isinstance(events, list):
-                events = []
-            events.append({
-                "type": "world_action",
-                "action": dict(action),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            extra["recent_events"] = events[-100:]
+            # La registrazione persistente dell'evento viene fatta dal turn controller,
+            # dopo che tutte le azioni sono state validate ed eseguite.
+            pass
 
         executed.append(action)
 
-    _save(character, extra)
-    return {"executed_actions": executed, "extra": extra}
+    character = get_character(character_id) or character
+    return {
+        "executed_actions": executed,
+        "created_memory_ids": created_memory_ids,
+        "extra": _extra(character),
+    }
