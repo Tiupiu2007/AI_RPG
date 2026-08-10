@@ -1,9 +1,11 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import json
+import mimetypes
 import random
 import sys
 
+from app.character_interaction import process_character_turn
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
 from app.characters.character_from_description import generate_character_from_description
@@ -69,6 +71,8 @@ def json_response(handler, data, status=200):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     handler.end_headers()
     try:
         handler.wfile.write(body)
@@ -149,12 +153,10 @@ def generate_statistics(race_name):
     ranks = [random.randint(30, 72) for _ in STAT_NAMES]
     ranks.sort(reverse=True)
     random.shuffle(ranks)
-
     stats = {}
     for index, name in enumerate(STAT_NAMES):
         value = ranks[index] + random.randint(-6, 6) + bias.get(name, 0)
         stats[name] = max(5, min(95, value))
-
     primary = random.choice(list(bias.keys()) or list(STAT_NAMES))
     secondary = random.choice([name for name in STAT_NAMES if name != primary])
     stats[primary] = min(95, stats[primary] + random.randint(4, 10))
@@ -168,15 +170,12 @@ def generate_extra(identity, profile, source="system", description="", importanc
     max_health = 70 + stats["constitution"] * 2 + stats["strength"] // 2
     max_stamina = 50 + stats["constitution"] + stats["agility"]
     max_mana = 20 + stats["intelligence"] + stats["willpower"]
-
     abilities = RACE_ABILITIES.get(race, [])[:]
     random.shuffle(abilities)
     abilities = [{"name": name, "description": description} for name, description in abilities[:random.randint(0, min(2, len(abilities)))]]
-
     skill_names = RACE_SKILLS.get(race, ["Osservazione", "Sopravvivenza", "Comunicazione"])
     random.shuffle(skill_names)
     skills = [{"name": name, "description": f"Competenza pratica sviluppata dal personaggio nell'ambito di {name.lower()}."} for name in skill_names[:random.randint(1, min(3, len(skill_names)))]]
-
     return {
         "statistics": stats,
         "abilities": abilities,
@@ -185,11 +184,7 @@ def generate_extra(identity, profile, source="system", description="", importanc
         "relationships": [],
         "psychology": {key: value for key, value in profile.items() if key in {"mental_state", "emotional_stability", "fears", "desires", "values", "traumas"}},
         "personality": {key: value for key, value in profile.items() if key in {"personality_description", "traits", "strengths", "flaws", "habits", "social_behavior"}},
-        "generation": {
-            "source": source,
-            "importance": importance,
-            "description": description,
-        },
+        "generation": {"source": source, "importance": importance, "description": description},
     }
 
 
@@ -197,7 +192,6 @@ def build_generated_character(identity, source="system", description="", importa
     profile = profile_to_dict(generate_character_profile(identity_to_dict(identity)))
     languages = get_race_languages(identity.race)
     extra = generate_extra(identity, profile, source, description, importance)
-
     return {
         "identity": identity_to_dict(identity),
         "languages": [language_to_dict(language) for language in languages],
@@ -218,13 +212,15 @@ def generate_character(description="", source="system", importance="major"):
         weights = [max(0.0, float(race.rarity)) for race in races]
         race = random.choices(races, weights=weights if any(weights) else None, k=1)[0]
         identity = generate_identity(race.name)
-
     return build_generated_character(identity, source, description, importance)
 
 
 class RPGServer(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[SERVER] {self.address_string()} - {format % args}")
+
+    def do_OPTIONS(self):
+        json_response(self, {"success": True})
 
     def do_GET(self):
         try:
@@ -265,6 +261,21 @@ class RPGServer(BaseHTTPRequestHandler):
                 importance = data.get("importance", "major")
                 json_response(self, generate_character(description, source, importance))
                 return
+
+            if request_path == "/api/character-interaction":
+                data = self.read_json()
+                character_id = int(data.get("character_id"))
+                player_input = str(data.get("message", "")).strip()
+                if not player_input:
+                    raise ValueError("Il messaggio non può essere vuoto.")
+                result = process_character_turn(
+                    character_id,
+                    player_input,
+                    data.get("recent_conversation", []),
+                )
+                json_response(self, result)
+                return
+
             if request_path == "/api/characters":
                 data = self.read_json()
                 identity = identity_from_dict(data.get("identity", data))
@@ -281,6 +292,7 @@ class RPGServer(BaseHTTPRequestHandler):
                     print(f"[DATABASE] Personaggio aggiornato: ID {character_id}")
                 json_response(self, {"success": True, "id": character_id, "identity": identity_to_dict(identity, character_id), "languages": [language_to_dict(language) for language in languages], "extra": extra})
                 return
+
             if request_path == "/api/race-languages":
                 data = self.read_json()
                 race = data.get("race")
@@ -289,6 +301,7 @@ class RPGServer(BaseHTTPRequestHandler):
                     return
                 json_response(self, [language_to_dict(language) for language in get_race_languages(race)])
                 return
+
             json_response(self, {"error": "Endpoint non trovato."}, 404)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
