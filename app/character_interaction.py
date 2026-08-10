@@ -1,4 +1,5 @@
 import json
+import re
 
 from app.ai_provider import ask_character
 from app.database.characters_db import get_character, save_character
@@ -24,7 +25,7 @@ def _identity_dict(identity):
 
 
 def _player_context(extra):
-    """Espone al modello solo l'identità del PLAYER, mai il suo contenitore extra."""
+    """Espone al modello solo l'identità del PLAYER."""
     player_id = extra.get("player_id")
     player = extra.get("player")
     if not isinstance(player, dict):
@@ -48,7 +49,7 @@ def _player_context(extra):
 
 
 def _safe_character_list(value):
-    """Riduce gli altri personaggi a metadati pubblici, impedendo leakage di memoria."""
+    """Riduce gli altri personaggi a metadati pubblici, senza memorie."""
     if not isinstance(value, list):
         return []
     result = []
@@ -82,7 +83,7 @@ def _safe_relationships(value):
 
 
 def _character_conversation(extra):
-    """Restituisce esclusivamente la cronologia salvata sul personaggio corrente."""
+    """Restituisce esclusivamente la cronologia del personaggio corrente."""
     conversation = extra.get("conversation", []) if isinstance(extra, dict) else []
     if not isinstance(conversation, list):
         return []
@@ -98,6 +99,24 @@ def _character_conversation(extra):
             continue
         cleaned.append({"role": role, "content": content.strip()})
     return cleaned[-16:]
+
+
+def _explicit_memory(player_input: str, character_name: str) -> str | None:
+    """Riconosce solo richieste esplicite di memoria del PLAYER.
+
+    Non tenta di trasformare ogni frase in memoria. Serve come garanzia
+    deterministica per frasi come 'ricordati che...', evitando di affidare
+    completamente alla scelta del modello un'informazione che il PLAYER ha
+    chiesto esplicitamente di conservare.
+    """
+    text = " ".join(player_input.strip().split())
+    match = re.match(r"^(?:ricordati|ricorda|tienilo a mente|tienilo presente)\s*(?:che\s*)?(.+)$", text, re.IGNORECASE)
+    if not match:
+        return None
+    fact = match.group(1).strip(" .!?\t\n")
+    if not fact:
+        return None
+    return f"Il PLAYER ha chiesto a {character_name} di ricordare: {fact}"
 
 
 def build_character_context(character_id, recent_conversation=None):
@@ -117,6 +136,8 @@ def build_character_context(character_id, recent_conversation=None):
 
     stored_conversation = _character_conversation(extra)
 
+    # Le query sono già per character_id, ma il filtro viene mantenuto anche
+    # qui come seconda barriera contro eventuali dati corrotti/legacy.
     memories = [
         memory for memory in get_character_memories(character_id, limit=20, include_secrets=True)
         if isinstance(memory, dict) and memory.get("character_id") == character_id
@@ -125,7 +146,7 @@ def build_character_context(character_id, recent_conversation=None):
         event for event in get_recent_events(character_id, limit=20)
         if isinstance(event, dict) and event.get("character_id") == character_id
     ]
-    continuity_facts = build_continuity_facts(memories, events, character_id=character_id)
+    continuity_facts = build_continuity_facts(memories, events, character_id)
 
     return {
         "context_scope": {
@@ -208,13 +229,11 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if character is None:
         raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
-    # La cronologia del frontend non è autorevole e non viene mai usata per il prompt.
-    # Rimane nel parametro solo per compatibilità con vecchie versioni dell'API.
+    # La cronologia del frontend non è autorevole: ogni NPC usa solo la propria.
     conversation = get_character_conversation(character_id)
     context = build_character_context(character_id)
 
-    scope = context.get("context_scope", {})
-    if scope.get("character_id") != character_id:
+    if context.get("context_scope", {}).get("character_id") != character_id:
         raise ValueError("Contesto personaggio incoerente.")
     if any(memory.get("character_id") != character_id for memory in context.get("memories", [])):
         raise ValueError("Il contesto contiene una memoria appartenente a un altro personaggio.")
@@ -248,6 +267,28 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
             "Le azioni del game engine non sono valide. "
             f"Risposta ricevuta: {str(raw_result)[:1000]}"
         )
+
+    # Una richiesta esplicita di memoria è deterministica: se il modello non
+    # l'ha aggiunta, la aggiungiamo noi al personaggio corrente. Non può finire
+    # nella memoria di un altro NPC perché character_id viene imposto qui.
+    character_name = character["identity"].name
+    explicit_memory = _explicit_memory(player_input.strip(), character_name)
+    if explicit_memory:
+        has_memory = any(
+            isinstance(action, dict)
+            and action.get("type") == "create_memory"
+            and action.get("character_id") == character_id
+            for action in actions
+        )
+        if not has_memory:
+            actions.append({
+                "type": "create_memory",
+                "character_id": character_id,
+                "content": explicit_memory,
+                "memory_type": "fatto_personale",
+                "importance": 8,
+                "secret": False,
+            })
 
     validated_actions = validate_actions(actions, context)
     reaction = next(a for a in validated_actions if a["type"] == "character_reaction")
