@@ -69,3 +69,15 @@
 7. Integrare narrativa IA.
 8. Rifinire interfaccia e mappa.
 9. Test completi e ottimizzazione.
+
+
+1. Relazioni persistenti
+2. Evoluzione delle relazioni
+3. Memoria intelligente
+4. Stato del mondo
+5. Personaggi presenti/ascolto
+6. Eventi e conseguenze
+7. Sistema di tempo
+8. Sistema di luoghi
+9. Sistema di obiettivi
+10. Rifinitura del comportamento AI
