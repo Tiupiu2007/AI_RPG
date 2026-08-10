@@ -4,7 +4,9 @@ import json
 import mimetypes
 import random
 import sys
+import hashlib
 
+from app.ai_provider import ask_character, MODEL_NAME
 from app.character_interaction import process_character_turn
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
@@ -244,6 +246,15 @@ class RPGServer(BaseHTTPRequestHandler):
                     character["languages"] = get_race_languages(character["identity"].race)
                 json_response(self, character_to_dict(character))
                 return
+            if request_path == "/api/ai-status":
+                provider_path = Path(__file__).resolve().parent / "app" / "ai_provider.py"
+                code_hash = hashlib.sha256(provider_path.read_bytes()).hexdigest()[:12] if provider_path.exists() else "missing"
+                json_response(self, {
+                    "model": MODEL_NAME,
+                    "provider_file": str(provider_path),
+                    "provider_hash": code_hash,
+                })
+                return
             self.serve_frontend()
         except ValueError:
             json_response(self, {"error": "ID personaggio non valido."}, 400)
@@ -323,60 +334,55 @@ class RPGServer(BaseHTTPRequestHandler):
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
             print("[SERVER ERROR]", error)
-            json_response(self, {"error": str(error)}, 500)
+            json_response(self, {"error": str(error)}, 500
 
     def read_json(self):
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length <= 0:
-            return {}
-        return json.loads(self.rfile.read(content_length).decode("utf-8"))
+            raise ValueError("Body JSON mancante.")
+        body = self.rfile.read(content_length)
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("JSON della richiesta non valido.") from error
+        if not isinstance(data, dict):
+            raise ValueError("Il body JSON deve essere un oggetto.")
+        return data
 
     def serve_frontend(self):
-        request_path = self.path.split("?", 1)[0]
-        if request_path == "/":
-            request_path = "/index.html"
-        file_path = (FRONTEND_DIR / request_path.lstrip("/")).resolve()
-        try:
-            file_path.relative_to(FRONTEND_DIR.resolve())
-        except ValueError:
-            self.send_error(403, "Accesso negato.")
+        relative = self.path.split("?", 1)[0].lstrip("/") or "index.html"
+        file_path = (FRONTEND_DIR / relative).resolve()
+        if FRONTEND_DIR not in file_path.parents and file_path != FRONTEND_DIR:
+            self.send_error(403)
             return
         if not file_path.exists() or not file_path.is_file():
-            self.send_error(404, "File non trovato.")
-            return
-        mime_types = {".html":"text/html; charset=utf-8", ".css":"text/css; charset=utf-8", ".js":"application/javascript; charset=utf-8", ".json":"application/json; charset=utf-8", ".png":"image/png", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".svg":"image/svg+xml", ".ico":"image/x-icon"}
-        try:
-            data = file_path.read_bytes()
-        except OSError as error:
-            self.send_error(500, str(error))
-            return
+            file_path = FRONTEND_DIR / "index.html"
+        content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        data = file_path.read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", mime_types.get(file_path.suffix.lower(), "application/octet-stream"))
+        self.send_header("Content-Type", f"{content_type}; charset=utf-8" if content_type.startswith("text/") else content_type)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        try:
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionAbortedError):
-            pass
+        self.wfile.write(data)
 
 
-def main():
-    if not FRONTEND_DIR.exists():
-        print(f"Frontend non trovato: {FRONTEND_DIR}")
-        sys.exit(1)
+def run_server():
     init_database()
+    print("=" * 60)
+    print("AI RPG SERVER")
+    print(f"AI MODEL: {MODEL_NAME}")
+    print("AI PROVIDER: app.ai_provider")
+    print("AI STATUS: http://127.0.0.1:8000/api/ai-status")
+    print("=" * 60)
     server = HTTPServer((HOST, PORT), RPGServer)
-    print(f"Server: http://{HOST}:{PORT}")
-    print(f"Frontend: {FRONTEND_DIR}")
-    print("Database: data/characters.db")
-    print("Premi CTRL+C per fermare il server.")
+    print(f"Server avviato su http://{HOST}:{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nArresto server...")
+        print("\nServer arrestato.")
     finally:
         server.server_close()
 
 
 if __name__ == "__main__":
-    main()
+    run_server()
