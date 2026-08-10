@@ -1,5 +1,5 @@
 import { createEmptyCharacter, loadLocalCharacter, saveLocalCharacter, clearLocalCharacter } from "./character-state.js";
-import { loadWorldData, getRaceLanguages } from "./character-api.js";
+import { loadWorldData, getRaceLanguages, resetCharacterHistory } from "./character-api.js";
 import { loadProfileIntoUI, updateProfileFromUI, bindProfileInputs } from "./profile.js";
 import { initializeNavigation, activateSection, updateCharacterTitle } from "./character-ui.js";
 import { generateCharacter } from "./character-generation.js";
@@ -102,6 +102,38 @@ function newCharacter() {
     activateSection("identity");
 }
 
+async function resetCurrentCharacterHistory() {
+    if (!character?.id) {
+        alert("Seleziona prima un personaggio salvato.");
+        return;
+    }
+
+    const confirmed = confirm(
+        "Azzerare memoria, eventi e conversazione persistente di questo personaggio?\n\n" +
+        "Il personaggio e le relazioni verranno mantenuti."
+    );
+    if (!confirmed) return;
+
+    try {
+        const result = await resetCharacterHistory(character.id, false);
+        // La cache locale non deve conservare una vecchia conversazione/stato.
+        if (character.extra && typeof character.extra === "object") {
+            delete character.extra.conversation;
+            delete character.extra.state;
+        }
+        saveLocalCharacter(character);
+        window.dispatchEvent(new CustomEvent("ai-rpg-character-history-reset", { detail: result }));
+        alert(`Memoria resettata.\nMemorie: ${result.memories_deleted}\nEventi: ${result.events_deleted}`);
+    } catch (error) {
+        console.error("Errore reset memoria:", error);
+        alert(`Reset memoria fallito.\n\n${error.message}`);
+    }
+}
+
+// API globale per l'interfaccia RPG/chat: il pulsante "Pulisci chat"
+// può distinguere il reset della sola UI dal reset persistente del personaggio.
+window.aiRpgResetCharacterHistory = resetCurrentCharacterHistory;
+
 function onGenerated(generated) {
     character = generated;
     loadCharacterIntoUI();
@@ -122,7 +154,9 @@ async function initializeApp() {
         initializeInputListeners();
         document.getElementById("generateButton")?.addEventListener("click", () => runGeneration());
         window.addEventListener("ai-rpg-generate-character", event => runGeneration(event.detail || {}));
+        window.addEventListener("ai-rpg-reset-character-history", resetCurrentCharacterHistory);
         document.getElementById("newCharacterButton")?.addEventListener("click", newCharacter);
+        document.getElementById("resetHistoryButton")?.addEventListener("click", resetCurrentCharacterHistory);
         character = loadLocalCharacter();
         loadCharacterIntoUI();
     } catch (error) {
