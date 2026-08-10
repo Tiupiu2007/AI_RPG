@@ -4,6 +4,7 @@ from app.ai_provider import ask_character
 from app.database.characters_db import get_character, save_character
 from app.game_engine.action_executor import execute_actions
 from app.game_engine.action_validator import validate_actions
+from app.memory.memory import create_event, get_character_memories, get_recent_events
 
 
 def _identity_dict(identity):
@@ -34,8 +35,11 @@ def build_character_context(character_id, recent_conversation=None):
     if not stored_conversation and isinstance(recent_conversation, list):
         stored_conversation = recent_conversation
 
-    # Il personaggio reagente è sempre quello esplicitamente selezionato dal client.
-    # Non viene mai ricavato dal testo libero del giocatore.
+    # La memoria non viene più letta da extra_data: è un archivio persistente
+    # separato e interrogabile dal game engine.
+    memories = get_character_memories(character_id, limit=40, include_secrets=True)
+    events = get_recent_events(character_id, limit=40)
+
     return {
         "character": {
             **identity,
@@ -49,7 +53,7 @@ def build_character_context(character_id, recent_conversation=None):
             "magic": extra.get("magic", {}),
         },
         "state": extra.get("state", {}) if isinstance(extra.get("state", {}), dict) else {},
-        "memories": list_value("memories"),
+        "memories": memories,
         "relationships": list_value("relationships"),
         "characters_present": list_value("characters_present"),
         "scene": {
@@ -60,7 +64,7 @@ def build_character_context(character_id, recent_conversation=None):
             "available_location_ids": list_value("available_location_ids"),
         },
         "recent_conversation": stored_conversation[-16:],
-        "recent_events": list_value("recent_events")[-16:],
+        "recent_events": events,
     }
 
 
@@ -97,8 +101,8 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if not isinstance(player_input, str) or not player_input.strip():
         raise ValueError("Il messaggio non può essere vuoto.")
 
-    # Il lookup fallisce prima di chiamare l'AI: stringhe casuali come "cia" o "ciao"
-    # non possono quindi diventare accidentalmente un personaggio.
+    # Il lookup fallisce prima di chiamare l'AI: "cia", "ciao" o altri testi
+    # casuali non possono diventare accidentalmente un personaggio.
     if get_character(character_id) is None:
         raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
@@ -125,7 +129,22 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
 
     validated_actions = validate_actions(actions, context)
     reaction = next(a for a in validated_actions if a["type"] == "character_reaction")
+
+    # Niente viene scritto come realtà prima della validazione.
     execution = execute_actions(character_id, validated_actions)
+
+    # Ogni turno concluso diventa un evento persistente. In questo modo anche una
+    # normale conversazione può essere recuperata in futuro, senza trasformare ogni
+    # messaggio in una memoria a lungo termine.
+    event_id = create_event(
+        character_id,
+        "character_interaction",
+        {
+            "player": player_input.strip(),
+            "character": narration.strip(),
+            "actions": validated_actions,
+        },
+    )
 
     character = get_character(character_id)
     if character is None:
@@ -145,5 +164,7 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
         "character_reaction": reaction,
         "actions": validated_actions,
         "executed_actions": execution["executed_actions"],
+        "created_memory_ids": execution.get("created_memory_ids", []),
+        "event_id": event_id,
         "conversation": conversation[-16:],
     }
