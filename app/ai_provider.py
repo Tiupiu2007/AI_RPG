@@ -8,37 +8,8 @@ OLLAMA_TIMEOUT = 120
 TEMPERATURE = 0.65
 NUM_CTX = 16384
 
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "required": ["narration", "actions"],
-    "properties": {
-        "narration": {"type": "string"},
-        "actions": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["type", "character_id", "emotion", "thought", "intention", "goal"],
-                "properties": {
-                    "type": {"type": "string", "enum": ["character_reaction"]},
-                    "character_id": {"type": "integer"},
-                    "emotion": {"type": "string"},
-                    "thought": {"type": "string"},
-                    "intention": {"type": "string"},
-                    "goal": {"type": "string"},
-                },
-                "additionalProperties": False,
-            },
-        },
-    },
-    "additionalProperties": False,
-}
-
 
 def ask_ollama(system_prompt, user_prompt):
-    if not isinstance(system_prompt, str):
-        raise ValueError("system_prompt deve essere una stringa.")
-    if not isinstance(user_prompt, str):
-        raise ValueError("user_prompt deve essere una stringa.")
     payload = {
         "model": MODEL_NAME,
         "messages": [
@@ -46,7 +17,10 @@ def ask_ollama(system_prompt, user_prompt):
             {"role": "user", "content": user_prompt},
         ],
         "stream": False,
-        "format": RESPONSE_SCHEMA,
+        # Il modello ha già il contratto JSON nello system prompt.
+        # JSON mode è più compatibile con qwen3:30b-a3b-instruct-2507-q4_K_M
+        # rispetto a imporre uno schema complesso direttamente a Ollama.
+        "format": "json",
         "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
     }
     try:
@@ -61,7 +35,7 @@ def ask_ollama(system_prompt, user_prompt):
         raise ValueError("Ollama ha restituito una risposta HTTP non interpretabile come JSON.") from error
     message = data.get("message")
     if not isinstance(message, dict) or not isinstance(message.get("content"), str):
-        raise ValueError("Risposta Ollama priva di un campo message.content valido.")
+        raise ValueError("Ollama ha restituito una risposta priva di message.content valido.")
     return message["content"].strip()
 
 
@@ -77,7 +51,6 @@ def _subject_guidance(player_input: str) -> str:
     ]
     player_match = any(re.search(pattern, text) for pattern in player_patterns)
     character_match = any(re.search(pattern, text) for pattern in character_patterns)
-
     if player_match and character_match:
         return "PRIMA PERSONA = PLAYER; SECONDA PERSONA = CURRENT_CHARACTER. Mantieni i soggetti separati."
     if player_match:
@@ -93,7 +66,6 @@ def build_ai_context(character_context):
     character = character_context.get("character")
     if not isinstance(character, dict):
         raise ValueError("Il contesto non contiene un personaggio valido.")
-
     roles = character_context.get("roles", {})
     if not isinstance(roles, dict):
         roles = {}
@@ -134,13 +106,35 @@ def build_ai_context(character_context):
     }
 
 
+def _parse_ai_json(response: str) -> dict:
+    """Parse JSON prodotto da Qwen, tollerando eventuali wrapper comuni senza inventare testo."""
+    try:
+        result = json.loads(response)
+    except json.JSONDecodeError:
+        # Alcune risposte possono contenere testo prima/dopo l'oggetto JSON.
+        match = re.search(r"\{.*\}", response, flags=re.DOTALL)
+        if not match:
+            raise ValueError(f"Qwen non ha restituito JSON valido: {response[:500]}")
+        try:
+            result = json.loads(match.group(0))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Qwen ha restituito JSON non interpretabile: {response[:500]}") from error
+
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Qwen ha restituito una stringa invece del JSON del game engine: {response[:500]}") from error
+
+    if not isinstance(result, dict):
+        raise ValueError(f"La risposta AI deve essere un oggetto JSON: {response[:500]}")
+    return result
+
+
 def ask_character(character_context, player_input):
     if not isinstance(character_context, dict):
         raise ValueError("character_context deve essere un dizionario.")
-    if not isinstance(player_input, str):
-        raise ValueError("player_input deve essere una stringa.")
-    player_input = player_input.strip()
-    if not player_input:
+    if not isinstance(player_input, str) or not player_input.strip():
         raise ValueError("player_input non può essere vuoto.")
 
     character = character_context.get("character")
@@ -154,9 +148,7 @@ def ask_character(character_context, player_input):
     state = character_context.get("state", {})
     if not isinstance(state, dict):
         state = {}
-    current_goal = state.get("goal", "")
-    if not isinstance(current_goal, str):
-        current_goal = ""
+    current_goal = state.get("goal", "") if isinstance(state.get("goal", ""), str) else ""
 
     ai_context = build_ai_context(character_context)
     context_json = json.dumps(ai_context, indent=2, ensure_ascii=False, default=str)
@@ -177,57 +169,97 @@ Non decidere mai azioni, pensieri, emozioni, intenzioni o ricordi del PLAYER.
 ATTRIBUZIONE DEL SOGGETTO
 - io, me, mi, mio/mia, ho, sono, ero, avevo, facevo, l'ho = PLAYER.
 - tu, te, ti, tuo/tua, hai, sei, eri, avevi, facevi, fai, l'hai = CURRENT_CHARACTER.
-- una frase in terza persona appartiene al soggetto nominato.
+- terza persona = soggetto nominato.
 Il messaggio attuale ha priorità nell'attribuzione grammaticale.
 Una memoria o un evento precedente NON può cambiare il soggetto della frase attuale.
 
 Esempi:
 Io ho ucciso il drago -> PLAYER ha ucciso il drago.
-Hai ucciso il drago? -> la domanda riguarda CURRENT_CHARACTER.
-Perché l'ho fatto? -> il soggetto è PLAYER.
-Perché l'hai fatto? -> il soggetto è CURRENT_CHARACTER.
+Hai ucciso il drago? -> domanda su CURRENT_CHARACTER.
+Perché l'ho fatto? -> soggetto PLAYER.
+Perché l'hai fatto? -> soggetto CURRENT_CHARACTER.
 
 CONTINUITÀ
-Memorie, eventi e continuity_facts sono fatti persistenti. Non modificarli solo per rendere coerente la risposta.
-Se il PLAYER afferma qualcosa che contraddice un fatto persistente, trattalo come possibile nuova informazione o contraddizione, non cambiare automaticamente il proprietario dell'azione.
+Memorie, eventi e continuity_facts sono fatti persistenti. Non modificarli solo per rendere elegante la risposta.
+Se il PLAYER afferma qualcosa che contraddice un fatto persistente, trattalo come possibile nuova informazione o contraddizione.
 Non inventare fatti mancanti.
 
 CONOSCENZA
 Conosci solo ciò che CURRENT_CHARACTER può conoscere dal contesto. Non sei onnisciente.
 
 STILE
-Rispondi normalmente come {character_name}. Non aggiungere misteri, combattimenti o lore se il messaggio non li richiede.
+Rispondi normalmente come {character_name}. Non aggiungere automaticamente misteri, combattimenti o lore.
 
-OUTPUT
-Restituisci esclusivamente un JSON conforme allo schema imposto dal sistema.
+OUTPUT OBBLIGATORIO
+Restituisci ESCLUSIVAMENTE un singolo oggetto JSON:
+{{
+  "narration": "risposta parlata di {character_name}",
+  "actions": [
+    {{
+      "type": "character_reaction",
+      "character_id": {character_id},
+      "emotion": "emozione",
+      "thought": "pensiero di {character_name}",
+      "intention": "intenzione di {character_name}",
+      "goal": "{current_goal}"
+    }}
+  ]
+}}
+
+REGOLE JSON:
+- narration deve essere una stringa non vuota.
+- actions deve contenere esattamente una character_reaction.
+- character_reaction.character_id deve essere {character_id}.
+- Non aggiungere campi al livello principale.
+- Non mettere la risposta testuale dentro actions.
+- Nessun markdown o testo fuori dal JSON.
 """.strip()
 
     user_prompt = f"""
-CONTESTO AUTOREVOLE:
+CONTESTO AUTOREVOLE DEL GAME ENGINE:
 {context_json}
 
 MESSAGGIO ATTUALE DEL PLAYER:
-{player_input}
+{player_input.strip()}
 
 {subject_lock}
 
-Rispondi direttamente al PLAYER come {character_name}.
-Mantieni la continuità con i fatti persistenti senza alterare i soggetti.
+Rispondi direttamente al PLAYER come {character_name}. Restituisci solo il JSON richiesto.
 """.strip()
 
     response = ask_ollama(system_prompt, user_prompt)
-    try:
-        result = json.loads(response)
-    except json.JSONDecodeError as error:
-        raise ValueError("Ollama ha restituito JSON non valido.") from error
-    if not isinstance(result, dict):
-        raise ValueError("La risposta AI deve essere un oggetto JSON.")
+    result = _parse_ai_json(response)
 
     narration = result.get("narration")
     actions = result.get("actions")
+
+    # Compatibilità con eventuali wrapper prodotti da modelli/versioni precedenti.
+    if not isinstance(narration, str) or not narration.strip():
+        for key in ("response", "text", "content"):
+            candidate = result.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                result["narration"] = candidate.strip()
+                narration = result["narration"]
+                break
+
     if not isinstance(narration, str) or not narration.strip():
         raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:500]}")
+
     if not isinstance(actions, list):
         raise ValueError(f"La risposta AI non contiene un array actions valido. Risposta ricevuta: {response[:500]}")
+
+    # Se Qwen ha omesso character_reaction, aggiungiamo solo la struttura minima
+    # deterministica necessaria al game engine; non inventiamo una nuova narrazione.
+    reactions = [a for a in actions if isinstance(a, dict) and a.get("type") == "character_reaction"]
+    if not reactions:
+        actions.insert(0, {
+            "type": "character_reaction",
+            "character_id": character_id,
+            "emotion": "neutral",
+            "thought": "",
+            "intention": "",
+            "goal": current_goal,
+        })
+        result["actions"] = actions
 
     return json.dumps(result, ensure_ascii=False)
