@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI RPG - Scontro</title>
+<link rel="stylesheet" href="battle.css">
+</head>
+<body>
+<main class="battle-app">
+<header class="topbar">
+  <div><div class="eyebrow">AI RPG / SIMULAZIONE</div><h1>ARENA</h1><p>Seleziona due personaggi. L'IA dirige l'intero scontro.</p></div>
+  <a class="back" href="/">← Editor personaggi</a>
+</header>
+<section class="setup card">
+  <div class="fighter">
+    <label for="fighterA">COMBATTENTE A</label>
+    <select id="fighterA"><option value="">Seleziona personaggio</option></select>
+    <div id="previewA" class="preview">Nessun combattente selezionato.</div>
+  </div>
+  <div class="versus">VS</div>
+  <div class="fighter">
+    <label for="fighterB">COMBATTENTE B</label>
+    <select id="fighterB"><option value="">Seleziona personaggio</option></select>
+    <div id="previewB" class="preview">Nessun combattente selezionato.</div>
+  </div>
+  <div class="options">
+    <label for="style">STILE</label>
+    <select id="style"><option value="cinematico">Cinematico</option><option value="brutale">Brutale</option><option value="tattico">Tattico</option><option value="epico">Epico</option></select>
+  </div>
+  <button id="fightButton" class="fight" disabled>⚔ GENERA LO SCONTRO</button>
+</section>
+<section id="loading" class="loading hidden"><div class="spinner">✦</div><strong>L'IA sta dirigendo lo scontro...</strong><span>Analisi delle capacità, tattiche e conseguenze.</span></section>
+<section id="result" class="result hidden">
+  <div class="result-head card"><div class="eyebrow">SCONTRO COMPLETATO</div><h2 id="title"></h2><p id="introduction"></p></div>
+  <div id="rounds"></div>
+  <div class="winner card"><span>VINCITORE</span><strong id="winner"></strong><p id="ending"></p><small id="aftermath"></small></div>
+  <button id="againButton" class="again">Nuovo scontro</button>
+</section>
+</main>
+<script type="module" src="battle.js"></script>
+</body>
+</html>
