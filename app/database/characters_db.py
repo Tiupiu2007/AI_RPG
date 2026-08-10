@@ -53,6 +53,44 @@ def init_database() -> None:
                 FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
             )
         """)
+
+        # Memoria persistente: non viene più conservata dentro extra_data.
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character_id INTEGER NOT NULL,
+                memory_type TEXT NOT NULL DEFAULT 'evento',
+                content TEXT NOT NULL,
+                importance INTEGER NOT NULL DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+                secret INTEGER NOT NULL DEFAULT 0 CHECK (secret IN (0, 1)),
+                source_event_id INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_character_importance
+            ON memories(character_id, importance DESC, created_at DESC)
+        """)
+
+        # Eventi persistenti: ogni turno realmente concluso lascia una traccia.
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_events_character_id
+            ON events(character_id, id DESC)
+        """)
+
         connection.commit()
     finally:
         connection.close()
