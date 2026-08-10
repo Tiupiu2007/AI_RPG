@@ -84,12 +84,22 @@ class Market:
         self.prices[item] = round(price, 4)
         return self.prices[item]
 
+    def rebalance_prices(self, base_prices: dict[str, float], *, sensitivity: float = 0.5) -> dict[str, float]:
+        for item, base_price in base_prices.items():
+            self.update_price_from_supply_demand(item, base_price=base_price, sensitivity=sensitivity)
+        return dict(self.prices)
+
     def to_dict(self) -> dict[str, Any]:
         return {"market_id": self.market_id, "location_id": self.location_id, "currency": self.currency, "prices": dict(self.prices), "supply": dict(self.supply), "demand": dict(self.demand), "metadata": dict(self.metadata)}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Market":
-        return cls.create(data["location_id"], currency=data.get("currency", "gold"), market_id=data.get("market_id"))
+        result = cls.create(data["location_id"], currency=data.get("currency", "gold"), market_id=data.get("market_id"))
+        result.prices = dict(data.get("prices", {}))
+        result.supply = dict(data.get("supply", {}))
+        result.demand = dict(data.get("demand", {}))
+        result.metadata = dict(data.get("metadata", {}))
+        return result
 
 
 @dataclass
@@ -122,6 +132,27 @@ class EconomyState:
         for resource in self.resources.values():
             resource.advance(days)
 
+    def transfer_supply(self, origin_id: str, destination_id: str, item: str, amount: float) -> None:
+        if amount < 0:
+            raise ValueError("La quantità non può essere negativa.")
+        origin = self.market_at(origin_id)
+        destination = self.market_at(destination_id)
+        if origin is None or destination is None:
+            raise KeyError("Entrambe le località devono avere un mercato.")
+        available = origin.supply.get(item, 0.0)
+        if amount > available:
+            raise ValueError("Offerta insufficiente nel mercato di origine.")
+        origin.supply[item] = available - amount
+        destination.supply[item] = destination.supply.get(item, 0.0) + amount
+
+    def simulate_day(self, *, base_prices: dict[str, float] | None = None, sensitivity: float = 0.5) -> dict[str, dict[str, float]]:
+        self.advance_resources(1.0)
+        prices: dict[str, dict[str, float]] = {}
+        if base_prices:
+            for market_id, market in self.markets.items():
+                prices[market_id] = market.rebalance_prices(base_prices, sensitivity=sensitivity)
+        return prices
+
     def to_dict(self) -> dict[str, Any]:
         return {"resources": {k: v.to_dict() for k, v in self.resources.items()}, "markets": {k: v.to_dict() for k, v in self.markets.items()}, "trade_routes": self.trade_routes, "currencies": self.currencies}
 
@@ -133,10 +164,6 @@ class EconomyState:
             result.resources[item.resource_id] = item
         for raw in data.get("markets", {}).values():
             item = Market.from_dict(raw)
-            item.prices = dict(raw.get("prices", {}))
-            item.supply = dict(raw.get("supply", {}))
-            item.demand = dict(raw.get("demand", {}))
-            item.metadata = dict(raw.get("metadata", {}))
             result.markets[item.market_id] = item
         result.trade_routes = dict(data.get("trade_routes", {}))
         result.currencies = dict(data.get("currencies", result.currencies))
