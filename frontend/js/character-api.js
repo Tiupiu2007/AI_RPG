@@ -46,3 +46,30 @@ export async function saveCharacterToAPI(character) {
     if (!response.ok) throw new Error(data.error || "Salvataggio sul database fallito.");
     return data;
 }
+
+/**
+ * Cancella la cronologia narrativa persistente di un singolo personaggio.
+ * Non elimina il personaggio e non cancella le relazioni salvo richiesta esplicita.
+ */
+export async function resetCharacterHistory(characterId, clearRelationships = false) {
+    const id = Number(characterId);
+    if (!Number.isInteger(id) || id <= 0) {
+        throw new Error("ID personaggio non valido.");
+    }
+
+    const response = await fetch("/api/character-history/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            character_id: id,
+            clear_relationships: Boolean(clearRelationships)
+        })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data.error || "Reset della cronologia fallito.");
+    }
+
+    return data;
+}
