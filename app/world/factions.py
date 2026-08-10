@@ -52,6 +52,31 @@ class Faction:
         if location_id not in self.controlled_location_ids:
             self.controlled_location_ids.append(location_id)
 
+    def apply_settlement_influence(self, *, settlement_id: str, prosperity: float, stability: float, security: float, influence: float, governance: float = 0.0) -> dict[str, float]:
+        """Return deterministic pressure applied by this faction to a settlement.
+
+        Influence and governance are explicit inputs; the faction does not invent
+        events. Positive governance improves stability/security, while negative
+        governance represents harmful or coercive control.
+        """
+        influence = max(0.0, min(1.0, influence))
+        governance = max(-1.0, min(1.0, governance))
+        controlled = settlement_id in self.controlled_location_ids
+        if controlled:
+            influence = max(influence, 0.75)
+
+        governance_effect = governance * influence
+        security_delta = governance_effect * 15.0
+        stability_delta = governance_effect * 12.0
+        prosperity_delta = governance_effect * 8.0
+
+        if self.faction_type.casefold() in {"criminal", "bandit", "cult"}:
+            security_delta -= 10.0 * influence
+            stability_delta -= 7.0 * influence
+            prosperity_delta -= 4.0 * influence
+
+        return {"security_delta": security_delta, "stability_delta": stability_delta, "prosperity_delta": prosperity_delta, "influence": influence}
+
     def to_dict(self) -> dict[str, Any]:
         return {"faction_id": self.faction_id, "name": self.name, "faction_type": self.faction_type, "description": self.description, "goals": list(self.goals), "member_ids": list(self.member_ids), "controlled_region_ids": list(self.controlled_region_ids), "controlled_location_ids": list(self.controlled_location_ids), "influence": dict(self.influence), "relations": dict(self.relations), "resources": dict(self.resources), "active": self.active, "metadata": dict(self.metadata)}
 
@@ -97,6 +122,14 @@ class FactionMap:
 
     def factions_controlling_location(self, location_id: str) -> list[Faction]:
         return [f for f in self.factions.values() if location_id in f.controlled_location_ids and f.active]
+
+    def settlement_influence(self, settlement_id: str) -> list[tuple[Faction, dict[str, float]]]:
+        result: list[tuple[Faction, dict[str, float]]] = []
+        for faction in self.active():
+            influence = faction.influence.get(settlement_id, 0.0)
+            if settlement_id in faction.controlled_location_ids or influence > 0.0:
+                result.append((faction, {"influence": influence}))
+        return result
 
     def to_dict(self) -> dict[str, Any]:
         return {"factions": {key: faction.to_dict() for key, faction in self.factions.items()}}
