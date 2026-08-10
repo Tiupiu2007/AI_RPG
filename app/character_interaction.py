@@ -34,6 +34,8 @@ def build_character_context(character_id, recent_conversation=None):
     if not stored_conversation and isinstance(recent_conversation, list):
         stored_conversation = recent_conversation
 
+    # Il personaggio reagente è sempre quello esplicitamente selezionato dal client.
+    # Non viene mai ricavato dal testo libero del giocatore.
     return {
         "character": {
             **identity,
@@ -90,8 +92,15 @@ def clear_character_conversation(character_id):
 
 
 def process_character_turn(character_id, player_input, recent_conversation=None):
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("È richiesto l'ID di un personaggio reale.")
     if not isinstance(player_input, str) or not player_input.strip():
         raise ValueError("Il messaggio non può essere vuoto.")
+
+    # Il lookup fallisce prima di chiamare l'AI: stringhe casuali come "cia" o "ciao"
+    # non possono quindi diventare accidentalmente un personaggio.
+    if get_character(character_id) is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
     conversation = get_character_conversation(character_id)
     if not conversation and isinstance(recent_conversation, list):
