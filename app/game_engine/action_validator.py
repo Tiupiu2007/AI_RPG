@@ -9,9 +9,10 @@ ALLOWED_ACTIONS = {
     "relationship_change",
     "world_action",
 }
-
 WORLD_ACTIONS = {"speak", "approach", "move"}
 RELATIONSHIP_FIELDS = ("trust", "affection", "respect", "hostility")
+MAX_ACTIONS_PER_TURN = 5
+MAX_MEMORY_ACTIONS_PER_TURN = 1
 
 
 def _ids_from(value: Any) -> set[int]:
@@ -66,23 +67,27 @@ def _validate_character_reaction(action: dict[str, Any], character_id: int) -> N
     if _require_int(action, "character_id") != character_id:
         raise ValueError("character_reaction appartiene a un personaggio diverso.")
     for field in ("emotion", "thought", "intention", "goal"):
-        if not isinstance(action.get(field), str):
+        value = action.get(field)
+        if not isinstance(value, str):
             raise ValueError(f"character_reaction.{field} non è valido.")
+        if len(value) > 500:
+            raise ValueError(f"character_reaction.{field} è troppo lungo.")
 
 
 def _validate_memory(action: dict[str, Any], character_id: int) -> None:
     if _require_int(action, "character_id") != character_id:
         raise ValueError("create_memory può salvare solamente memorie del personaggio reagente.")
     content = action.get("content")
-    if not isinstance(content, str) or not content.strip() or len(content) > 500:
+    if not isinstance(content, str) or not content.strip() or len(content.strip()) > 500:
         raise ValueError("La memoria deve contenere testo da 1 a 500 caratteri.")
     importance = action.get("importance")
     if not isinstance(importance, int) or isinstance(importance, bool) or not 1 <= importance <= 10:
         raise ValueError("importance deve essere un intero compreso tra 1 e 10.")
     if action.get("secret") not in (True, False):
         raise ValueError("secret deve essere booleano.")
-    if "memory_type" in action and not isinstance(action["memory_type"], str):
-        raise ValueError("memory_type non è valido.")
+    if "memory_type" in action:
+        if not isinstance(action["memory_type"], str) or not action["memory_type"].strip():
+            raise ValueError("memory_type non è valido.")
 
 
 def _validate_relationship(action: dict[str, Any], character_id: int, context: dict[str, Any]) -> None:
@@ -124,7 +129,7 @@ def _validate_world_action(action: dict[str, Any], character_id: int, context: d
         dialogue = action.get("dialogue")
         if not isinstance(dialogue, str) or not dialogue.strip():
             raise ValueError("speak richiede un dialogue non vuoto.")
-        if len(dialogue) > 1000:
+        if len(dialogue.strip()) > 1000:
             raise ValueError("dialogue troppo lungo.")
 
     if action_name == "move":
@@ -141,6 +146,10 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
         raise ValueError("actions deve essere una lista.")
     if not isinstance(context, dict):
         raise ValueError("Il contesto del game engine deve essere un dizionario.")
+    if not actions:
+        raise ValueError("Il turno deve contenere almeno una character_reaction.")
+    if len(actions) > MAX_ACTIONS_PER_TURN:
+        raise ValueError(f"Sono consentite al massimo {MAX_ACTIONS_PER_TURN} azioni per turno.")
 
     character = context.get("character")
     if not isinstance(character, dict):
@@ -151,9 +160,12 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
 
     validated: list[dict[str, Any]] = []
     reaction_count = 0
+    memory_count = 0
+
     for action in actions:
         if not isinstance(action, dict):
             raise ValueError("Ogni action deve essere un oggetto JSON.")
+
         action_type = action.get("type")
         if action_type not in ALLOWED_ACTIONS:
             raise ValueError(f"Tipo di azione non consentito: {action_type!r}.")
@@ -162,6 +174,9 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
             reaction_count += 1
             _validate_character_reaction(action, character_id)
         elif action_type == "create_memory":
+            memory_count += 1
+            if memory_count > MAX_MEMORY_ACTIONS_PER_TURN:
+                raise ValueError("È consentita al massimo una create_memory per turno.")
             _validate_memory(action, character_id)
         elif action_type == "relationship_change":
             _validate_relationship(action, character_id, context)
@@ -173,4 +188,7 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
     if reaction_count != 1:
         raise ValueError("Deve esistere esattamente una character_reaction valida.")
 
-    return validated
+    # La reazione è il nucleo del turno e viene sempre eseguita per prima.
+    reaction = next(action for action in validated if action["type"] == "character_reaction")
+    others = [action for action in validated if action["type"] != "character_reaction"]
+    return [reaction, *others]
