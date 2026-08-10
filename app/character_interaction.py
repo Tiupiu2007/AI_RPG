@@ -136,17 +136,29 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     try:
         result = json.loads(raw_result)
     except (TypeError, json.JSONDecodeError) as error:
-        raise ValueError("Il game engine ha ricevuto una risposta AI non valida.") from error
+        raise ValueError(
+            "Il game engine ha ricevuto una risposta AI non valida. "
+            f"Risposta ricevuta: {str(raw_result)[:500]}"
+        ) from error
 
     if not isinstance(result, dict):
-        raise ValueError("La risposta del game engine deve essere un oggetto JSON.")
+        raise ValueError(
+            "La risposta del game engine deve essere un oggetto JSON. "
+            f"Risposta ricevuta: {str(raw_result)[:500]}"
+        )
 
     narration = result.get("narration")
     actions = result.get("actions")
     if not isinstance(narration, str) or not narration.strip():
-        raise ValueError("La risposta AI non contiene una narration valida.")
+        raise ValueError(
+            "La risposta AI non contiene una narration valida. "
+            f"Risposta ricevuta: {str(raw_result)[:1000]}"
+        )
     if not isinstance(actions, list):
-        raise ValueError("Le azioni del game engine non sono valide.")
+        raise ValueError(
+            "Le azioni del game engine non sono valide. "
+            f"Risposta ricevuta: {str(raw_result)[:1000]}"
+        )
 
     validated_actions = validate_actions(actions, context)
     reaction = next(a for a in validated_actions if a["type"] == "character_reaction")
