@@ -7,8 +7,23 @@ from typing import Any
 from app.database.characters_db import get_connection
 
 
+DEFAULT_MEMORY_LIMIT = 20
+MAX_MEMORY_LIMIT = 100
+DEFAULT_EVENT_LIMIT = 20
+MAX_EVENT_LIMIT = 100
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _bounded_limit(value: int, default: int, maximum: int) -> int:
+    """Normalizza un limite SQL evitando valori negativi o eccessivi."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Il limite deve essere un intero.") from error
+    return max(1, min(value, maximum))
 
 
 def create_memory(
@@ -19,21 +34,28 @@ def create_memory(
     secret: bool = False,
     source_event_id: int | None = None,
 ) -> int:
-    """Salva una memoria persistente senza creare duplicati identici."""
+    """Salva una memoria persistente evitando duplicati identici."""
     if not isinstance(character_id, int) or isinstance(character_id, bool):
         raise ValueError("character_id non valido.")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Il contenuto della memoria non può essere vuoto.")
-    if not 1 <= int(importance) <= 10:
+    if not isinstance(importance, int) or isinstance(importance, bool):
+        raise ValueError("importance deve essere un intero.")
+    if not 1 <= importance <= 10:
         raise ValueError("importance deve essere compreso tra 1 e 10.")
+    if not isinstance(secret, bool):
+        raise ValueError("secret deve essere booleano.")
+    if source_event_id is not None and (
+        not isinstance(source_event_id, int) or isinstance(source_event_id, bool)
+    ):
+        raise ValueError("source_event_id non valido.")
 
     content = " ".join(content.strip().split())
     memory_type = str(memory_type or "evento").strip() or "evento"
 
     connection = get_connection()
     try:
-        # La stessa informazione non deve essere salvata più volte solo perché
-        # è stata rilevata da eventi o turni diversi.
+        # Una stessa informazione non deve moltiplicarsi a ogni turno.
         existing = connection.execute(
             """
             SELECT id
@@ -58,7 +80,7 @@ def create_memory(
                 character_id,
                 memory_type,
                 content,
-                int(importance),
+                importance,
                 1 if secret else 0,
                 source_event_id,
                 _now(),
@@ -72,12 +94,18 @@ def create_memory(
 
 def get_character_memories(
     character_id: int,
-    limit: int = 20,
+    limit: int = DEFAULT_MEMORY_LIMIT,
     include_secrets: bool = True,
 ) -> list[dict[str, Any]]:
-    """Restituisce poche memorie utili, privilegiando importanza e recenza."""
-    limit = max(1, min(int(limit), 100))
+    """Restituisce le memorie più importanti e recenti del personaggio."""
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("character_id non valido.")
+    if not isinstance(include_secrets, bool):
+        raise ValueError("include_secrets deve essere booleano.")
+
+    limit = _bounded_limit(limit, DEFAULT_MEMORY_LIMIT, MAX_MEMORY_LIMIT)
     secret_clause = "" if include_secrets else "AND secret = 0"
+
     connection = get_connection()
     try:
         rows = connection.execute(
@@ -114,6 +142,11 @@ def create_event(
     event_type: str,
     payload: dict[str, Any],
 ) -> int:
+    """Registra un evento persistente del game engine."""
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("character_id non valido.")
+    if not isinstance(event_type, str) or not event_type.strip():
+        raise ValueError("event_type non può essere vuoto.")
     if not isinstance(payload, dict):
         raise ValueError("payload evento deve essere un dizionario.")
 
@@ -126,7 +159,7 @@ def create_event(
             """,
             (
                 character_id,
-                str(event_type),
+                event_type.strip(),
                 json.dumps(payload, ensure_ascii=False, default=str),
                 _now(),
             ),
@@ -137,8 +170,16 @@ def create_event(
         connection.close()
 
 
-def get_recent_events(character_id: int, limit: int = 30) -> list[dict[str, Any]]:
-    limit = max(1, min(int(limit), 200))
+def get_recent_events(
+    character_id: int,
+    limit: int = DEFAULT_EVENT_LIMIT,
+) -> list[dict[str, Any]]:
+    """Restituisce gli eventi in ordine cronologico, dal più vecchio al più recente."""
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("character_id non valido.")
+
+    limit = _bounded_limit(limit, DEFAULT_EVENT_LIMIT, MAX_EVENT_LIMIT)
+
     connection = get_connection()
     try:
         rows = connection.execute(
@@ -154,11 +195,12 @@ def get_recent_events(character_id: int, limit: int = 30) -> list[dict[str, Any]
     finally:
         connection.close()
 
-    result = []
+    result: list[dict[str, Any]] = []
     for row in reversed(rows):
         try:
             payload = json.loads(row["payload"] or "{}")
         except (TypeError, json.JSONDecodeError):
+            # Un evento corrotto non deve impedire il caricamento del personaggio.
             payload = {}
         result.append({
             "id": row["id"],
