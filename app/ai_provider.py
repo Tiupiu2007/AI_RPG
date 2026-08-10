@@ -8,6 +8,31 @@ OLLAMA_TIMEOUT = 120
 TEMPERATURE = 0.65
 NUM_CTX = 16384
 
+AI_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "narration": {"type": "string"},
+        "actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string"},
+                    "character_id": {"type": "integer"},
+                    "emotion": {"type": "string"},
+                    "thought": {"type": "string"},
+                    "intention": {"type": "string"},
+                    "goal": {"type": "string"},
+                },
+                "required": ["type", "character_id", "emotion", "thought", "intention", "goal"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["narration", "actions"],
+    "additionalProperties": False,
+}
+
 
 def ask_ollama(system_prompt, user_prompt):
     payload = {
@@ -18,7 +43,7 @@ def ask_ollama(system_prompt, user_prompt):
         ],
         "stream": False,
         "think": False,
-        "format": "json",
+        "format": AI_RESPONSE_SCHEMA,
         "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
     }
     try:
@@ -39,7 +64,7 @@ def ask_ollama(system_prompt, user_prompt):
         thinking = message.get("thinking")
         raise ValueError(
             "Ollama ha restituito message.content vuoto. "
-            f"thinking={str(thinking)[:500]}"
+            f"thinking={str(thinking)[:1000]}"
         )
     return content.strip()
 
@@ -132,6 +157,37 @@ def _parse_ai_json(response: str) -> dict:
     return result
 
 
+def _normalize_result(result, character_id, current_goal):
+    if not isinstance(result, dict):
+        return None
+    narration = result.get("narration")
+    if not isinstance(narration, str) or not narration.strip():
+        for key in ("response", "text", "content", "message"):
+            candidate = result.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                narration = candidate.strip()
+                result["narration"] = narration
+                break
+    if not isinstance(narration, str) or not narration.strip():
+        return None
+
+    actions = result.get("actions")
+    if not isinstance(actions, list):
+        actions = []
+    reactions = [a for a in actions if isinstance(a, dict) and a.get("type") == "character_reaction"]
+    if not reactions:
+        actions.insert(0, {
+            "type": "character_reaction",
+            "character_id": character_id,
+            "emotion": "neutral",
+            "thought": "",
+            "intention": "",
+            "goal": current_goal,
+        })
+    result["actions"] = actions
+    return result
+
+
 def ask_character(character_context, player_input):
     if not isinstance(character_context, dict):
         raise ValueError("character_context deve essere un dizionario.")
@@ -174,12 +230,6 @@ ATTRIBUZIONE DEL SOGGETTO
 Il messaggio attuale ha priorità nell'attribuzione grammaticale.
 Una memoria o un evento precedente NON può cambiare il soggetto della frase attuale.
 
-Esempi:
-Io ho ucciso il drago -> PLAYER ha ucciso il drago.
-Hai ucciso il drago? -> domanda su CURRENT_CHARACTER.
-Perché l'ho fatto? -> soggetto PLAYER.
-Perché l'hai fatto? -> soggetto CURRENT_CHARACTER.
-
 CONTINUITÀ
 Memorie, eventi e continuity_facts sono fatti persistenti. Non modificarli solo per rendere elegante la risposta.
 Se il PLAYER afferma qualcosa che contraddice un fatto persistente, trattalo come possibile nuova informazione o contraddizione.
@@ -192,7 +242,7 @@ STILE
 Rispondi normalmente come {character_name}. Non aggiungere automaticamente misteri, combattimenti o lore.
 
 OUTPUT OBBLIGATORIO
-Restituisci ESCLUSIVAMENTE un singolo oggetto JSON:
+Restituisci esclusivamente un singolo oggetto JSON con questa struttura:
 {{
   "narration": "risposta parlata di {character_name}",
   "actions": [
@@ -206,14 +256,6 @@ Restituisci ESCLUSIVAMENTE un singolo oggetto JSON:
     }}
   ]
 }}
-
-REGOLE JSON:
-- narration deve essere una stringa non vuota.
-- actions deve contenere esattamente una character_reaction.
-- character_reaction.character_id deve essere {character_id}.
-- Non aggiungere campi al livello principale.
-- Non mettere la risposta testuale dentro actions.
-- Nessun markdown o testo fuori dal JSON.
 """.strip()
 
     user_prompt = f"""
@@ -229,32 +271,8 @@ Rispondi direttamente al PLAYER come {character_name}. Restituisci solo il JSON 
 """.strip()
 
     response = ask_ollama(system_prompt, user_prompt)
-    result = _parse_ai_json(response)
-
-    narration = result.get("narration")
-    actions = result.get("actions")
-    if not isinstance(narration, str) or not narration.strip():
-        for key in ("response", "text", "content"):
-            candidate = result.get(key)
-            if isinstance(candidate, str) and candidate.strip():
-                result["narration"] = candidate.strip()
-                narration = result["narration"]
-                break
-    if not isinstance(narration, str) or not narration.strip():
-        raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:500]}")
-    if not isinstance(actions, list):
-        raise ValueError(f"La risposta AI non contiene un array actions valido. Risposta ricevuta: {response[:500]}")
-
-    reactions = [a for a in actions if isinstance(a, dict) and a.get("type") == "character_reaction"]
-    if not reactions:
-        actions.insert(0, {
-            "type": "character_reaction",
-            "character_id": character_id,
-            "emotion": "neutral",
-            "thought": "",
-            "intention": "",
-            "goal": current_goal,
-        })
-        result["actions"] = actions
+    result = _normalize_result(_parse_ai_json(response), character_id, current_goal)
+    if result is None:
+        raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:1000]}")
 
     return json.dumps(result, ensure_ascii=False)
