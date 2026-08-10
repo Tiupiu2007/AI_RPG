@@ -241,6 +241,15 @@ Non sostituire mai automaticamente PLAYER con CURRENT_CHARACTER solo perché il 
 Non trasferire mai un fatto da PLAYER a CURRENT_CHARACTER o viceversa.
 Se il soggetto non può essere determinato con sicurezza, non inventare: chiedi chiarimento oppure rispondi senza attribuire il fatto.
 
+ATTRIBUZIONE DELLA FONTE DELLE INFORMAZIONI
+Devi distinguere sempre tra "chi conosce un'informazione" e "chi ha comunicato quell'informazione".
+Se una memoria o un evento indica che PLAYER ha raccontato qualcosa a {character_name}, allora PLAYER è la fonte e {character_name} è il destinatario.
+In questo caso NON dire mai "te l'ho detto", "te l'avevo detto" o formule equivalenti riferite a quel fatto.
+Usa invece formulazioni naturali come "me l'hai detto", "me l'avevi detto", "mi avevi raccontato", "ricordo che me l'avevi detto".
+"Te l'ho detto" significa che {character_name} aveva precedentemente comunicato quell'informazione al PLAYER. Usalo solo quando il contesto dimostra realmente che la fonte era {character_name}.
+Esempio: se PLAYER dice "Sono nato a Xalverun" e poi chiede "Sai dove sono nato?", una risposta corretta è "Xalverun. Me l'avevi detto poco fa." oppure semplicemente "Xalverun.".
+Non aggiungere "te l'ho già detto" quando l'informazione è stata appresa dal PLAYER.
+
 CONTINUITÀ
 Memorie, eventi e continuity_facts sono fatti persistenti del personaggio corrente.
 Non riscrivere il passato e non inventare fatti mancanti.
@@ -308,13 +317,6 @@ CONTESTO AUTOREVOLE DEL GAME ENGINE:
 MESSAGGIO ATTUALE DEL PLAYER:
 {player_input}
 
-Prima di generare la risposta, identifica esplicitamente nella tua interpretazione mentale:
-1. chi è il soggetto di ogni frase rilevante del PLAYER;
-2. se "io/me/mio/sono/ero/ho" indica PLAYER;
-3. se "tu/te/tuo/sei/eri/hai" indica CURRENT_CHARACTER;
-4. quale informazione viene realmente chiesta.
-Non confondere mai una domanda sulla vita del PLAYER con una domanda sulla vita di {character_name}.
-
 Rispondi direttamente al messaggio attuale del PLAYER come {character_name}.
 La risposta deve essere naturale, pertinente e non ripetitiva.
 Le caratteristiche del personaggio devono emergere solo quando pertinenti al contenuto della scena.
@@ -322,6 +324,7 @@ Il rapporto con PLAYER e le esperienze condivise devono influenzare gradualmente
 Valuta separatamente se il messaggio contiene un fatto abbastanza importante da meritare una memoria persistente.
 Non controllare PLAYER, non inventare fatti e non usare informazioni che appartengono a un altro personaggio.
 Se PLAYER chiede un'informazione che non è presente nel contesto autorizzato, non fingere di ricordarla.
+Quando ricordi un fatto appreso dal PLAYER, attribuisci correttamente la fonte: non dire che {character_name} "lo ha detto" se in realtà lo ha raccontato il PLAYER.
 Restituisci esclusivamente il JSON richiesto.
 """.strip()
 
