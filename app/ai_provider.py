@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import requests
@@ -145,6 +146,18 @@ def _recent_narrations(character_context: dict[str, Any]) -> list[str]:
         if role in {"assistant", "character", "npc", "current_character"} and isinstance(text, str) and text.strip():
             values.append(text.strip())
     return values[-MAX_RECENT_NARRATIONS:]
+
+
+def _normalize_for_comparison(text: str) -> str:
+    """Normalizza una risposta solo per individuare duplicati evidenti."""
+    return re.sub(r"\s+", " ", str(text or "").strip().lower()).strip(" .!?\"'“”‘’")
+
+
+def _is_duplicate_narration(narration: str, previous: list[str]) -> bool:
+    normalized = _normalize_for_comparison(narration)
+    if not normalized:
+        return False
+    return any(normalized == _normalize_for_comparison(item) for item in previous if isinstance(item, str))
 
 
 def _parse_ai_result(response: str) -> dict[str, Any]:
@@ -330,4 +343,25 @@ Restituisci esclusivamente il JSON richiesto.
 
     response = ask_ollama(system_prompt, user_prompt)
     result = _parse_ai_result(response)
+
+    # Difesa deterministica contro la ripetizione identica della risposta precedente.
+    # Il prompt la scoraggia già, ma questa verifica impedisce che Ollama restituisca
+    # due volte la stessa battuta anche quando il modello ignora l'istruzione.
+    if _is_duplicate_narration(result["narration"], recent_narrations):
+        retry_prompt = f"""
+La narration appena generata è identica a una risposta già data:
+"{result['narration']}"
+
+Genera ORA una risposta diversa al messaggio del PLAYER.
+Mantieni esattamente gli stessi fatti conosciuti e la stessa identità del personaggio.
+NON ripetere la frase precedente.
+NON usare formule equivalenti come "te l'ho già detto" se il fatto era stato comunicato dal PLAYER.
+Puoi rispondere in modo molto breve, anche con una sola frase, purché sia naturale e diversa.
+Restituisci esclusivamente lo stesso JSON richiesto, con narration e actions.
+""".strip()
+        retry_response = ask_ollama(system_prompt, f"{user_prompt}\n\n{retry_prompt}")
+        retry_result = _parse_ai_result(retry_response)
+        if not _is_duplicate_narration(retry_result["narration"], recent_narrations):
+            result = retry_result
+
     return json.dumps(result, ensure_ascii=False)
