@@ -16,6 +16,7 @@ from .locations import Location
 from .positions import ActorPosition
 from .regions import Region, RegionMap, RacialTerritory
 from .settlements import SettlementMap
+from .settlement_conditions import SettlementConditionMap, SettlementConditions
 from .time import WorldClock
 from .trade import ProductionRule, TradeMap, TradeRoute
 
@@ -30,6 +31,7 @@ class WorldState:
     biomes: BiomeMap = field(default_factory=BiomeMap)
     regions: RegionMap = field(default_factory=RegionMap)
     settlements: SettlementMap = field(default_factory=SettlementMap)
+    settlement_conditions: SettlementConditionMap = field(default_factory=SettlementConditionMap)
     clock: WorldClock = field(default_factory=WorldClock.create)
     environment: EnvironmentEngine = field(default_factory=EnvironmentEngine)
     factions: FactionMap = field(default_factory=FactionMap)
@@ -106,6 +108,22 @@ class WorldState:
     def dominant_race_at(self, coordinates: dict[str, float]) -> str | None:
         return self.regions.dominant_race_at(coordinates)
 
+    def add_settlement_conditions(self, conditions: SettlementConditions) -> None:
+        self.settlement_conditions.add(conditions)
+        self.update()
+
+    def get_settlement_conditions(self, settlement_id: str) -> SettlementConditions | None:
+        return self.settlement_conditions.get(settlement_id)
+
+    def update_settlement_conditions(self, settlement_id: str, *, unmet_needs: dict[str, float], total_requirements: dict[str, float], trade_access: float = 0.0, security_pressure: float = 0.0) -> SettlementConditions:
+        conditions = self.get_settlement_conditions(settlement_id)
+        if conditions is None:
+            conditions = SettlementConditions(settlement_id=settlement_id)
+            self.settlement_conditions.add(conditions)
+        conditions.apply_daily_conditions(unmet_needs=unmet_needs, total_requirements=total_requirements, trade_access=trade_access, security_pressure=security_pressure)
+        self.update()
+        return conditions
+
     def add_production_rule(self, rule: ProductionRule) -> None:
         self.trade.add_production_rule(rule)
         self.update()
@@ -131,7 +149,7 @@ class WorldState:
         return result
 
     def to_dict(self) -> dict[str, Any]:
-        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "clock": self.clock.to_dict(), "environment": self.environment.to_dict(), "factions": self.factions.to_dict(), "economy": self.economy.to_dict(), "trade": self.trade.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
+        return {"world_id": self.world_id, "name": self.name, "description": self.description, "locations": {k: v.to_dict() for k, v in self.locations.items()}, "geography": self.geography.to_dict(), "biomes": self.biomes.to_dict(), "regions": self.regions.to_dict(), "settlements": self.settlements.to_dict(), "settlement_conditions": self.settlement_conditions.to_dict(), "clock": self.clock.to_dict(), "environment": self.environment.to_dict(), "factions": self.factions.to_dict(), "economy": self.economy.to_dict(), "trade": self.trade.to_dict(), "actor_positions": {k: v.to_dict() for k, v in self.actor_positions.items()}, "events": self.events, "conditions": self.conditions, "metadata": self.metadata, "updated_at": self.updated_at}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorldState":
@@ -143,6 +161,7 @@ class WorldState:
         world.biomes = BiomeMap.from_dict(data.get("biomes", {}))
         world.regions = RegionMap.from_dict(data.get("regions", {}))
         world.settlements = SettlementMap.from_dict(data.get("settlements", {}))
+        world.settlement_conditions = SettlementConditionMap.from_dict(data.get("settlement_conditions", {}))
         world.clock = WorldClock.from_dict(data.get("clock", {}))
         world.environment = EnvironmentEngine.from_dict(data.get("environment", {}))
         world.factions = FactionMap.from_dict(data.get("factions", {}))
