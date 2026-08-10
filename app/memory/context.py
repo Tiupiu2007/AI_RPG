@@ -11,7 +11,7 @@ def _clean_text(value: Any) -> str | None:
 
 
 def _belongs_to_character(item: dict[str, Any], character_id: int) -> bool:
-    """Accetta solo dati esplicitamente appartenenti al personaggio corrente."""
+    """Accetta solo dati con proprietario esplicito uguale al personaggio corrente."""
     owner = item.get("character_id")
     return isinstance(owner, int) and not isinstance(owner, bool) and owner == character_id
 
@@ -19,29 +19,27 @@ def _belongs_to_character(item: dict[str, Any], character_id: int) -> bool:
 def build_continuity_facts(
     memories: list[dict[str, Any]],
     events: list[dict[str, Any]],
-    character_id: int | None = None,
+    character_id: int,
 ) -> list[str]:
-    """Costruisce fatti che il personaggio corrente è autorizzato a conoscere.
+    """Costruisce fatti persistenti esclusivamente per ``character_id``.
 
-    La continuità è volutamente separata per personaggio. Se viene fornito
-    character_id, qualsiasi memoria/evento con un proprietario diverso viene
-    scartato prima di entrare nel prompt AI.
+    Il proprietario è obbligatorio: senza un character_id non è possibile
+    stabilire a quale NPC appartenga un ricordo o un evento.
     """
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("build_continuity_facts richiede un character_id valido.")
+
     facts: list[str] = []
 
     for memory in memories:
-        if not isinstance(memory, dict):
-            continue
-        if character_id is not None and not _belongs_to_character(memory, character_id):
+        if not isinstance(memory, dict) or not _belongs_to_character(memory, character_id):
             continue
         content = _clean_text(memory.get("content"))
         if content:
             facts.append(f"MEMORIA DEL PERSONAGGIO CORRENTE: {content}")
 
     for event in events:
-        if not isinstance(event, dict):
-            continue
-        if character_id is not None and not _belongs_to_character(event, character_id):
+        if not isinstance(event, dict) or not _belongs_to_character(event, character_id):
             continue
 
         payload = event.get("payload", {})
@@ -82,5 +80,4 @@ def build_continuity_facts(
                         f"{content}"
                     )
 
-    # Mantiene l'ordine cronologico e limita il prompt.
     return facts[-80:]
