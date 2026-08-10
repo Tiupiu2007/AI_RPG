@@ -17,9 +17,7 @@ def ask_ollama(system_prompt, user_prompt):
             {"role": "user", "content": user_prompt},
         ],
         "stream": False,
-        # Il modello ha già il contratto JSON nello system prompt.
-        # JSON mode è più compatibile con qwen3:30b-a3b-instruct-2507-q4_K_M
-        # rispetto a imporre uno schema complesso direttamente a Ollama.
+        "think": False,
         "format": "json",
         "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
     }
@@ -34,9 +32,16 @@ def ask_ollama(system_prompt, user_prompt):
     except ValueError as error:
         raise ValueError("Ollama ha restituito una risposta HTTP non interpretabile come JSON.") from error
     message = data.get("message")
-    if not isinstance(message, dict) or not isinstance(message.get("content"), str):
-        raise ValueError("Ollama ha restituito una risposta priva di message.content valido.")
-    return message["content"].strip()
+    if not isinstance(message, dict):
+        raise ValueError(f"Ollama ha restituito una risposta senza message valido: {str(data)[:1000]}")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        thinking = message.get("thinking")
+        raise ValueError(
+            "Ollama ha restituito message.content vuoto. "
+            f"thinking={str(thinking)[:500]}"
+        )
+    return content.strip()
 
 
 def _subject_guidance(player_input: str) -> str:
@@ -107,11 +112,9 @@ def build_ai_context(character_context):
 
 
 def _parse_ai_json(response: str) -> dict:
-    """Parse JSON prodotto da Qwen, tollerando eventuali wrapper comuni senza inventare testo."""
     try:
         result = json.loads(response)
     except json.JSONDecodeError:
-        # Alcune risposte possono contenere testo prima/dopo l'oggetto JSON.
         match = re.search(r"\{.*\}", response, flags=re.DOTALL)
         if not match:
             raise ValueError(f"Qwen non ha restituito JSON valido: {response[:500]}")
@@ -119,13 +122,11 @@ def _parse_ai_json(response: str) -> dict:
             result = json.loads(match.group(0))
         except json.JSONDecodeError as error:
             raise ValueError(f"Qwen ha restituito JSON non interpretabile: {response[:500]}") from error
-
     if isinstance(result, str):
         try:
             result = json.loads(result)
         except json.JSONDecodeError as error:
             raise ValueError(f"Qwen ha restituito una stringa invece del JSON del game engine: {response[:500]}") from error
-
     if not isinstance(result, dict):
         raise ValueError(f"La risposta AI deve essere un oggetto JSON: {response[:500]}")
     return result
@@ -232,8 +233,6 @@ Rispondi direttamente al PLAYER come {character_name}. Restituisci solo il JSON 
 
     narration = result.get("narration")
     actions = result.get("actions")
-
-    # Compatibilità con eventuali wrapper prodotti da modelli/versioni precedenti.
     if not isinstance(narration, str) or not narration.strip():
         for key in ("response", "text", "content"):
             candidate = result.get(key)
@@ -241,15 +240,11 @@ Rispondi direttamente al PLAYER come {character_name}. Restituisci solo il JSON 
                 result["narration"] = candidate.strip()
                 narration = result["narration"]
                 break
-
     if not isinstance(narration, str) or not narration.strip():
         raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:500]}")
-
     if not isinstance(actions, list):
         raise ValueError(f"La risposta AI non contiene un array actions valido. Risposta ricevuta: {response[:500]}")
 
-    # Se Qwen ha omesso character_reaction, aggiungiamo solo la struttura minima
-    # deterministica necessaria al game engine; non inventiamo una nuova narrazione.
     reactions = [a for a in actions if isinstance(a, dict) and a.get("type") == "character_reaction"]
     if not reactions:
         actions.insert(0, {
