@@ -17,6 +17,19 @@ def _identity_dict(identity):
     }
 
 
+def _player_context(extra):
+    player_id = extra.get("player_id")
+    player = extra.get("player")
+    if not isinstance(player, dict):
+        player = {}
+    return {
+        "id": player_id if isinstance(player_id, int) else None,
+        "name": player.get("name"),
+        "identity": player,
+        "role": "PLAYER",
+    }
+
+
 def build_character_context(character_id, recent_conversation=None):
     character_data = get_character(character_id)
     if character_data is None:
@@ -41,6 +54,15 @@ def build_character_context(character_id, recent_conversation=None):
     continuity_facts = build_continuity_facts(memories, events)
 
     return {
+        "roles": {
+            "player": _player_context(extra),
+            "current_character": {
+                "id": character_id,
+                "name": identity.get("name"),
+                "surname": identity.get("surname"),
+                "role": "CURRENT_CHARACTER",
+            },
+        },
         "character": {
             **identity,
             "psychology": extra.get("psychology", {}),
@@ -57,7 +79,7 @@ def build_character_context(character_id, recent_conversation=None):
         "relationships": list_value("relationships"),
         "characters_present": list_value("characters_present"),
         "scene": {
-            "player": extra.get("player"),
+            "player": _player_context(extra),
             "reacting_character_id": character_id,
             "player_id": extra.get("player_id"),
             "involved_characters": list_value("involved_characters"),
