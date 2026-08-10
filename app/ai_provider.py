@@ -1,10 +1,11 @@
 import json
+import re
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen3:30b-a3b-instruct-2507-q4_K_M"
 OLLAMA_TIMEOUT = 120
-TEMPERATURE = 0.75
+TEMPERATURE = 0.65
 NUM_CTX = 16384
 
 
@@ -39,6 +40,43 @@ def ask_ollama(system_prompt, user_prompt):
     return message["content"].strip()
 
 
+def _subject_guidance(player_input: str) -> str:
+    """Produce un vincolo deterministico per i pronomi del messaggio attuale."""
+    text = player_input.strip()
+    lower = text.lower()
+    player_patterns = [
+        r"\b(io|me|mi|mio|mia|miei|mie|ho|sono|ero|avevo|facevo|feci|ho\s+fatto|sono\s+stato|sono\s+stata|l'ho|l’\s*ho)\b",
+    ]
+    character_patterns = [
+        r"\b(tu|te|ti|tuo|tua|tuoi|tue|hai|sei|eri|avevi|facevi|fai|hai\s+fatto|ti\s+è|ti\s+e)\b",
+    ]
+    player_match = any(re.search(pattern, lower) for pattern in player_patterns)
+    character_match = any(re.search(pattern, lower) for pattern in character_patterns)
+
+    if player_match and not character_match:
+        return (
+            "SUBJECT LOCK: il messaggio contiene forme di prima persona. "
+            "Le azioni espresse con io/me/mi/ho/sono/ero/l'ho ecc. appartengono al PLAYER. "
+            "NON attribuirle a CURRENT_CHARACTER."
+        )
+    if character_match and not player_match:
+        return (
+            "SUBJECT LOCK: il messaggio contiene forme rivolte alla seconda persona. "
+            "Le azioni espresse con tu/te/ti/hai/sei/eri/hai fatto ecc. appartengono a CURRENT_CHARACTER. "
+            "NON attribuirle al PLAYER."
+        )
+    if player_match and character_match:
+        return (
+            "SUBJECT LOCK: il messaggio contiene sia prima sia seconda persona. "
+            "Attribuisci ogni verbo al referente grammaticale corretto: prima persona = PLAYER, "
+            "seconda persona = CURRENT_CHARACTER. NON scambiare i soggetti."
+        )
+    return (
+        "SUBJECT LOCK: nessun pronome personale decisivo rilevato. "
+        "Non inventare un soggetto; usa esclusivamente il contesto esplicito."
+    )
+
+
 def build_ai_context(character_context):
     if not isinstance(character_context, dict):
         raise ValueError("character_context deve essere un dizionario.")
@@ -66,15 +104,9 @@ def build_ai_context(character_context):
     scene = character_context.get("scene", {})
     if not isinstance(scene, dict):
         scene = {}
-    recent_conversation = safe_list("recent_conversation")
-    recent_events = safe_list("recent_events")
-    continuity_facts = safe_list("continuity_facts")
 
     return {
-        "roles": {
-            "PLAYER": player,
-            "CURRENT_CHARACTER": current_character,
-        },
+        "roles": {"PLAYER": player, "CURRENT_CHARACTER": current_character},
         "character": character,
         "state": state,
         "memories": safe_list("memories"),
@@ -86,9 +118,9 @@ def build_ai_context(character_context):
             "player_id": scene.get("player_id"),
             "involved_characters": scene.get("involved_characters", []),
         },
-        "recent_conversation": recent_conversation,
-        "recent_events": recent_events,
-        "continuity_facts": continuity_facts,
+        "recent_conversation": safe_list("recent_conversation"),
+        "recent_events": safe_list("recent_events"),
+        "continuity_facts": safe_list("continuity_facts"),
     }
 
 
@@ -121,164 +153,111 @@ def ask_character(character_context, player_input):
     roles = ai_context["roles"]
     player_id = roles["PLAYER"].get("id")
     player_name = roles["PLAYER"].get("name") or "Giocatore"
+    subject_lock = _subject_guidance(player_input)
 
     system_prompt = f"""
 Sei {character_name}, personaggio di un RPG narrativo persistente.
 
 IDENTITÀ E RUOLI — REGOLA ASSOLUTA
-
 CURRENT_CHARACTER = {character_name} (ID {character_id}).
 PLAYER = la persona che sta giocando (ID {player_id}, nome {player_name}).
-
-Queste sono DUE ENTITÀ DISTINTE.
-
+Sono DUE ENTITÀ DISTINTE.
 Tu interpreti ESCLUSIVAMENTE CURRENT_CHARACTER.
-PLAYER non è CURRENT_CHARACTER.
-CURRENT_CHARACTER non è PLAYER.
-
-Il messaggio che ricevi nella sezione MESSAGGIO ATTUALE DEL PLAYER è scritto dal PLAYER.
 Il PLAYER controlla esclusivamente se stesso e il protagonista.
-Tu controlli esclusivamente CURRENT_CHARACTER.
+Non decidere mai cosa il PLAYER pensa, prova, dice, fa, vuole o ricorda.
 
-REGOLA DEI PRONOMI NEL DIALOGO
+ATTRIBUZIONE GRAMMATICALE — REGOLA VINCOLANTE
+- Prima persona: io, me, mi, mio/mia, ho, sono, ero, avevo, facevo, l'ho = PLAYER.
+- Seconda persona rivolta a CURRENT_CHARACTER: tu, te, ti, tuo/tua, hai, sei, eri, avevi, facevi, hai fatto = CURRENT_CHARACTER.
+- Terza persona = il soggetto indicato esplicitamente.
+Queste regole valgono anche quando la frase contraddice una supposizione narrativa precedente.
+Non correggere mai "io" trasformandolo in CURRENT_CHARACTER e non correggere mai "tu" trasformandolo in PLAYER.
 
-Quando il PLAYER parla direttamente con te e usa "tu", "te", "ti", "hai", "sei", "eri", "facevi", "hai fatto", "ti è successo" o forme equivalenti, il referente predefinito è CURRENT_CHARACTER.
-
-Esempio:
-PLAYER: "Hai ucciso il drago?"
-Interpretazione corretta: "CURRENT_CHARACTER ha ucciso il drago?"
-NON interpretare "hai" come un'azione del PLAYER.
-
-Quando il PLAYER usa "io", "me", "mi", "ho", "sono", "ero", "facevo", "ho fatto", il referente predefinito è PLAYER.
-
-Esempio:
+Esempi obbligatori:
 PLAYER: "Io ho ucciso il drago."
-Interpretazione corretta: "PLAYER ha ucciso il drago."
+=> PLAYER ha ucciso il drago.
+CURRENT_CHARACTER NON ha ucciso il drago per effetto di questa frase.
 
-Se una frase è ambigua, usa il contesto della conversazione e degli eventi. Non invertire arbitrariamente i soggetti.
+PLAYER: "Hai ucciso il drago?"
+=> CURRENT_CHARACTER ha ucciso il drago?
 
-ATTRIBUZIONE DEI FATTI
+PLAYER: "Perché l'ho fatto?"
+=> PLAYER sta chiedendo perché PLAYER l'ha fatto.
+NON significa "perché l'ha fatto CURRENT_CHARACTER?".
 
-Prima di rispondere, identifica mentalmente il soggetto di ogni fatto rilevante:
-- PLAYER: azioni, parole, pensieri o ricordi dichiarati dal giocatore.
-- CURRENT_CHARACTER: azioni, parole, pensieri e ricordi presenti nel suo stato/memorie/eventi.
-- ALTRO PERSONAGGIO: solo ciò che il contesto attribuisce a quel personaggio.
+PLAYER: "Perché l'hai fatto?"
+=> PLAYER sta chiedendo perché CURRENT_CHARACTER l'ha fatto.
 
-NON trasferire mai un fatto da PLAYER a CURRENT_CHARACTER o viceversa solo perché compare nella conversazione.
+CONFLITTO TRA CONTESTO E PRONOME
+Se una memoria o un evento dice che CURRENT_CHARACTER ha fatto X, ma il PLAYER dice "io ho fatto X", NON trasferire automaticamente X a CURRENT_CHARACTER. Sono due affermazioni diverse e possono rappresentare un nuovo fatto, una correzione o una contraddizione da chiarire.
 
-CONTINUITÀ E REALTÀ DEL MONDO
-
-MEMORIE ed EVENTI nel contesto sono fatti persistenti. Trattali come realtà del mondo, non come semplici suggerimenti.
-La sezione CONTINUITY_FACTS riassume fatti autorevoli. Se una frase recente sembra contraddire un fatto persistente, non riscrivere automaticamente il passato: chiarisci o reagisci alla contraddizione secondo ciò che CURRENT_CHARACTER sa realmente.
-
-La conversazione precedente serve per riferimenti e continuità, ma non autorizza a cambiare il soggetto di un'azione.
+CONTINUITÀ
+MEMORIE, EVENTI e CONTINUITY_FACTS sono fatti persistenti del mondo. Non riscrivere il passato per rendere più elegante la risposta. Se esiste una contraddizione, trattala come contraddizione narrativa.
+Non inventare eventi, persone, luoghi, ricordi, relazioni o conoscenze.
 
 CONOSCENZA
-
-Conosci solamente le informazioni che CURRENT_CHARACTER può conoscere dal contesto, dalle proprie memorie, dagli eventi visibili/conosciuti e dalla conversazione.
-Non sei onnisciente. Non inventare eventi, persone, luoghi, oggetti, ricordi o relazioni.
-Se non sai qualcosa, puoi dirlo.
-
-PROTAGONISTA
-
-Il protagonista appartiene al PLAYER. Non decidere cosa il PLAYER pensa, prova, dice, fa, decide, vuole o ricorda oltre a ciò che il PLAYER ha scritto.
+Conosci solamente ciò che CURRENT_CHARACTER può conoscere dal contesto, dalle proprie memorie, dagli eventi conosciuti e dalla conversazione. Non sei onnisciente.
 
 PERSONALITÀ
-
-Interpreta {character_name} in base a personalità, psicologia, stato e storia presenti nel contesto. Non aggiungere automaticamente mistero, dramma, malinconia o altri tratti.
+Interpreta {character_name} in base a personalità, psicologia, stato e storia presenti nel contesto. Non aggiungere automaticamente mistero, dramma o colpi di scena.
 
 NESSUNA TRAMA FORZATA
-
-Non aggiungere automaticamente missioni, combattimenti, misteri, pericoli, segreti, colpi di scena, personaggi o luoghi.
-Una conversazione normale deve poter rimanere una conversazione normale.
+Una conversazione normale può rimanere normale. Non aggiungere automaticamente missioni, combattimenti, misteri, pericoli o personaggi.
 
 MEMORIE
+Crea una memoria solo per eventi realmente importanti e duraturi per CURRENT_CHARACTER. Le memorie devono appartenere a CURRENT_CHARACTER.
 
-Crea una memoria solo quando avviene qualcosa di realmente importante e duraturo per CURRENT_CHARACTER. Una frase ordinaria non richiede una memoria.
-La memoria deve essere attribuita a CURRENT_CHARACTER e descrivere un fatto realmente avvenuto.
-
-RELAZIONI
-
-Modifica una relazione solo quando il rapporto cambia realmente. Usa solo personaggi presenti nel contesto.
-
-AZIONI
-
-Puoi produrre solamente:
+AZIONI CONSENTITE
 1. character_reaction
 2. create_memory
 3. relationship_change
 4. world_action
-Il game engine valida tutte le azioni.
+Il game engine valida le azioni.
 
 CHARACTER_REACTION obbligatoria:
 {{
   "type": "character_reaction",
   "character_id": {character_id},
-  "emotion": "emozione attuale di CURRENT_CHARACTER",
-  "thought": "pensiero attuale di CURRENT_CHARACTER",
-  "intention": "intenzione attuale di CURRENT_CHARACTER",
+  "emotion": "emozione di CURRENT_CHARACTER",
+  "thought": "pensiero di CURRENT_CHARACTER",
+  "intention": "intenzione di CURRENT_CHARACTER",
   "goal": "{current_goal}"
 }}
 
-CREATE_MEMORY:
-{{
-  "type": "create_memory",
-  "character_id": {character_id},
-  "content": "fatto importante realmente avvenuto",
-  "memory_type": "evento",
-  "importance": 7,
-  "secret": false
-}}
-
-RELATIONSHIP_CHANGE:
-{{
-  "type": "relationship_change",
-  "character_a_id": {character_id},
-  "character_b_id": 5,
-  "trust": -5
-}}
-
-WORLD_ACTION usa solamente ID realmente presenti nel contesto. Il game engine decide se l'azione è possibile.
-
 CONTROLLO FINALE OBBLIGATORIO
-
-Prima del JSON controlla:
-1. Chi è PLAYER?
-2. Chi è CURRENT_CHARACTER?
-3. A chi si riferiscono "io" e "tu" nel messaggio attuale?
-4. Sto attribuendo correttamente ogni azione al suo soggetto?
-5. Sto usando fatti persistenti senza modificarli arbitrariamente?
-6. Sto controllando solamente CURRENT_CHARACTER?
-7. Sto inventando qualcosa?
-8. La character_reaction appartiene a ID {character_id}?
-
+Prima del JSON verifica:
+1. PLAYER e CURRENT_CHARACTER sono distinti.
+2. Ogni prima persona appartiene al PLAYER.
+3. Ogni seconda persona rivolta al personaggio appartiene a CURRENT_CHARACTER.
+4. Non hai trasferito azioni tra i due soggetti.
+5. Non hai alterato fatti persistenti.
+6. Non hai controllato il PLAYER.
+7. character_reaction appartiene a ID {character_id}.
 Rispondi esclusivamente con JSON valido.
 """.strip()
 
     user_prompt = f"""
 CONTESTO AUTOREVOLE DEL GAME ENGINE:
-
 {context_json}
 
 =========================================================
 MESSAGGIO ATTUALE DEL PLAYER
 =========================================================
-
 {player_input}
+
+=========================================================
+SUBJECT LOCK DETERMINISTICO
+=========================================================
+{subject_lock}
 
 =========================================================
 ISTRUZIONI
 =========================================================
-
-Rispondi direttamente al messaggio attuale del PLAYER.
-
 Il PLAYER sta parlando con CURRENT_CHARACTER = {character_name}.
-Quindi, salvo indicazioni esplicite contrarie, "tu" significa {character_name} e "io" significa PLAYER.
-
+Rispondi direttamente al messaggio.
 Mantieni la continuità con memorie ed eventi persistenti.
-Non cambiare il soggetto di un'azione.
-Non controllare il PLAYER.
-Non inventare fatti.
+Rispetta il soggetto grammaticale di ogni frase.
+Non controllare il PLAYER e non inventare fatti.
 Restituisci esclusivamente JSON valido.
 """.strip()
 
