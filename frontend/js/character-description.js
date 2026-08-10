@@ -144,6 +144,7 @@ function injectInteractionStyles() {
         .character-chat-input { flex:1; min-height:48px; max-height:160px; resize:vertical; }
         .character-chat-input-row .primary-button { align-self:flex-end; min-width:100px; }
         .character-chat-status { padding:0 16px 13px; color:var(--muted); font-size:10px; }
+        .chat-message.error { align-self:flex-start; border-color:#7f3f3f; background:#241515; color:#e8b5b5; }
         @media(max-width:700px){ .interaction-character-bar,.character-chat-input-row{flex-direction:column;align-items:stretch}.chat-message{max-width:92%}.character-chat{min-height:360px} }
     `;
     document.head.appendChild(style);
@@ -170,8 +171,8 @@ function renderInteraction() {
     }
 
     chatElement.innerHTML = messages.map(message => `
-        <div class="chat-message ${message.role === "user" ? "player" : "character"}">
-            <div class="chat-message-meta">${message.role === "user" ? "Tu" : escapeHtml(name || "Personaggio")}</div>
+        <div class="chat-message ${message.role === "user" ? "player" : message.role === "error" ? "error" : "character"}">
+            <div class="chat-message-meta">${message.role === "user" ? "Tu" : message.role === "error" ? "Sistema" : escapeHtml(name || "Personaggio")}</div>
             ${escapeHtml(message.content)}
         </div>
     `).join("");
@@ -227,10 +228,16 @@ async function sendCharacterMessage() {
         renderInteraction();
         setInteractionStatus("Turno completato.");
     } catch (error) {
-        messages.pop();
-        saveChat(character, messages);
+        // Il messaggio del giocatore è già stato inviato e NON deve sparire.
+        // Mostriamo l'errore come messaggio separato e manteniamo tutta la cronologia.
+        const currentMessages = loadChat(character);
+        currentMessages.push({
+            role: "error",
+            content: `Errore backend: ${error?.message || "Errore sconosciuto."}`,
+        });
+        saveChat(character, currentMessages);
         renderInteraction();
-        setInteractionStatus(`Errore backend: ${error.message}`);
+        setInteractionStatus("Il turno non è stato completato.");
     } finally {
         sendButton.disabled = false;
         input.focus();
