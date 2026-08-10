@@ -9,6 +9,7 @@ from app.game_engine.action_executor import execute_actions
 from app.game_engine.action_validator import validate_actions
 from app.memory.context import build_continuity_facts
 from app.memory.memory import create_event, get_character_memories, get_recent_events
+from app.relationships.relationships import ensure_relationship, get_character_relationships
 
 
 def _identity_dict(identity):
@@ -18,11 +19,9 @@ def _identity_dict(identity):
 def _player_context(extra):
     player_id = extra.get("player_id")
     player = extra.get("player")
-    if not isinstance(player, dict):
-        player = {}
+    if not isinstance(player, dict): player = {}
     identity = {key: player.get(key) for key in ("id", "name", "surname", "nickname", "age", "birth_date", "sex", "race", "physical_description", "appearance") if key in player}
-    if "id" not in identity and isinstance(player_id, int) and not isinstance(player_id, bool):
-        identity["id"] = player_id
+    if "id" not in identity and isinstance(player_id, int) and not isinstance(player_id, bool): identity["id"] = player_id
     return {"id": player_id if isinstance(player_id, int) and not isinstance(player_id, bool) else None, "name": player.get("name"), "identity": identity, "role": "PLAYER"}
 
 
@@ -41,7 +40,7 @@ def _safe_relationships(value):
     result = []
     for item in value:
         if isinstance(item, dict):
-            safe = {key: item[key] for key in ("character_id", "trust", "affection", "respect", "hostility") if key in item}
+            safe = {key: item[key] for key in ("character_a_id", "character_b_id", "trust", "affection", "respect", "hostility", "updated_at") if key in item}
             if safe: result.append(safe)
     return result
 
@@ -53,8 +52,7 @@ def _character_conversation(extra):
     for item in conversation:
         if not isinstance(item, dict): continue
         role, content = item.get("role"), item.get("content")
-        if role in {"user", "assistant"} and isinstance(content, str) and content.strip():
-            cleaned.append({"role": role, "content": content.strip()})
+        if role in {"user", "assistant"} and isinstance(content, str) and content.strip(): cleaned.append({"role": role, "content": content.strip()})
     return cleaned[-16:]
 
 
@@ -64,6 +62,15 @@ def _explicit_memory(player_input: str, character_name: str) -> str | None:
     if not match: return None
     fact = match.group(1).strip(" .!?\t\n")
     return f"Il PLAYER ha chiesto a {character_name} di ricordare: {fact}" if fact else None
+
+
+def _persistent_relationships(character_id: int, character_ids: list[int]) -> list[dict]:
+    """Rende disponibili al modello solo relazioni persistenti del personaggio corrente."""
+    for target_id in character_ids:
+        if target_id == character_id or not isinstance(target_id, int) or isinstance(target_id, bool): continue
+        if get_character(target_id) is None: continue
+        ensure_relationship(character_id, target_id)
+    return _safe_relationships(get_character_relationships(character_id))
 
 
 def build_character_context(character_id, recent_conversation=None):
@@ -80,15 +87,23 @@ def build_character_context(character_id, recent_conversation=None):
 
     memories = [m for m in get_character_memories(character_id, limit=20, include_secrets=True) if isinstance(m, dict) and m.get("character_id") == character_id]
     events = [e for e in get_recent_events(character_id, limit=20) if isinstance(e, dict) and e.get("character_id") == character_id]
+    present = _safe_character_list(extra.get("characters_present", []))
+    involved = _safe_character_list(extra.get("involved_characters", []))
+    related_ids = []
+    for item in present + involved:
+        target = item.get("id", item.get("character_id"))
+        if isinstance(target, int) and not isinstance(target, bool): related_ids.append(target)
+    relationships = _persistent_relationships(character_id, related_ids)
+
     return {
         "context_scope": {"character_id": character_id, "memory_scope": f"ONLY_CHARACTER_{character_id}", "event_scope": f"ONLY_CHARACTER_{character_id}", "conversation_scope": f"ONLY_CHARACTER_{character_id}"},
         "roles": {"player": _player_context(extra), "current_character": {"id": character_id, "name": identity.get("name"), "surname": identity.get("surname"), "role": "CURRENT_CHARACTER"}},
         "character": {**identity, "psychology": extra.get("psychology", {}), "personality": extra.get("personality", {}), "statistics": extra.get("statistics", {}), "abilities": extra.get("abilities", []), "skills": extra.get("skills", []), "conditions": extra.get("conditions", {}), "inventory": extra.get("inventory", {}), "magic": extra.get("magic", {})},
         "state": extra.get("state", {}) if isinstance(extra.get("state", {}), dict) else {},
         "memories": memories,
-        "relationships": _safe_relationships(extra.get("relationships", [])),
-        "characters_present": _safe_character_list(extra.get("characters_present", [])),
-        "scene": {"player": _player_context(extra), "reacting_character_id": character_id, "player_id": extra.get("player_id"), "involved_characters": _safe_character_list(extra.get("involved_characters", [])), "available_location_ids": list_value("available_location_ids")},
+        "relationships": relationships,
+        "characters_present": present,
+        "scene": {"player": _player_context(extra), "reacting_character_id": character_id, "player_id": extra.get("player_id"), "involved_characters": involved, "available_location_ids": list_value("available_location_ids")},
         "recent_conversation": _character_conversation(extra),
         "recent_events": events,
         "continuity_facts": build_continuity_facts(memories, events, character_id),
