@@ -42,39 +42,23 @@ def ask_ollama(system_prompt, user_prompt):
 
 def _subject_guidance(player_input: str) -> str:
     """Produce un vincolo deterministico per i pronomi del messaggio attuale."""
-    text = player_input.strip()
-    lower = text.lower()
+    text = player_input.strip().lower()
     player_patterns = [
-        r"\b(io|me|mi|mio|mia|miei|mie|ho|sono|ero|avevo|facevo|feci|ho\s+fatto|sono\s+stato|sono\s+stata|l'ho|l’\s*ho)\b",
+        r"\b(io|me|mi|mio|mia|miei|mie|ho|sono|ero|avevo|facevo|feci|l'ho|l’\s*ho)\b",
     ]
     character_patterns = [
-        r"\b(tu|te|ti|tuo|tua|tuoi|tue|hai|sei|eri|avevi|facevi|fai|hai\s+fatto|ti\s+è|ti\s+e)\b",
+        r"\b(tu|te|ti|tuo|tua|tuoi|tue|hai|sei|eri|avevi|facevi|fai)\b",
     ]
-    player_match = any(re.search(pattern, lower) for pattern in player_patterns)
-    character_match = any(re.search(pattern, lower) for pattern in character_patterns)
+    player_match = any(re.search(pattern, text) for pattern in player_patterns)
+    character_match = any(re.search(pattern, text) for pattern in character_patterns)
 
     if player_match and not character_match:
-        return (
-            "SUBJECT LOCK: il messaggio contiene forme di prima persona. "
-            "Le azioni espresse con io/me/mi/ho/sono/ero/l'ho ecc. appartengono al PLAYER. "
-            "NON attribuirle a CURRENT_CHARACTER."
-        )
+        return "SUBJECT LOCK: prima persona = PLAYER. Non attribuire queste azioni a CURRENT_CHARACTER."
     if character_match and not player_match:
-        return (
-            "SUBJECT LOCK: il messaggio contiene forme rivolte alla seconda persona. "
-            "Le azioni espresse con tu/te/ti/hai/sei/eri/hai fatto ecc. appartengono a CURRENT_CHARACTER. "
-            "NON attribuirle al PLAYER."
-        )
+        return "SUBJECT LOCK: seconda persona = CURRENT_CHARACTER. Non attribuire queste azioni al PLAYER."
     if player_match and character_match:
-        return (
-            "SUBJECT LOCK: il messaggio contiene sia prima sia seconda persona. "
-            "Attribuisci ogni verbo al referente grammaticale corretto: prima persona = PLAYER, "
-            "seconda persona = CURRENT_CHARACTER. NON scambiare i soggetti."
-        )
-    return (
-        "SUBJECT LOCK: nessun pronome personale decisivo rilevato. "
-        "Non inventare un soggetto; usa esclusivamente il contesto esplicito."
-    )
+        return "SUBJECT LOCK: prima persona = PLAYER; seconda persona = CURRENT_CHARACTER. Mantieni ogni soggetto separato."
+    return "SUBJECT LOCK: nessun soggetto personale decisivo rilevato. Non inventare un soggetto."
 
 
 def build_ai_context(character_context):
@@ -166,99 +150,84 @@ Tu interpreti ESCLUSIVAMENTE CURRENT_CHARACTER.
 Il PLAYER controlla esclusivamente se stesso e il protagonista.
 Non decidere mai cosa il PLAYER pensa, prova, dice, fa, vuole o ricorda.
 
-ATTRIBUZIONE GRAMMATICALE — REGOLA VINCOLANTE
+ATTRIBUZIONE GRAMMATICALE
 - Prima persona: io, me, mi, mio/mia, ho, sono, ero, avevo, facevo, l'ho = PLAYER.
-- Seconda persona rivolta a CURRENT_CHARACTER: tu, te, ti, tuo/tua, hai, sei, eri, avevi, facevi, hai fatto = CURRENT_CHARACTER.
-- Terza persona = il soggetto indicato esplicitamente.
-Queste regole valgono anche quando la frase contraddice una supposizione narrativa precedente.
-Non correggere mai "io" trasformandolo in CURRENT_CHARACTER e non correggere mai "tu" trasformandolo in PLAYER.
+- Seconda persona rivolta a CURRENT_CHARACTER: tu, te, ti, tuo/tua, hai, sei, eri, avevi, facevi, fai = CURRENT_CHARACTER.
+- Terza persona = soggetto esplicitamente indicato.
+Queste regole hanno priorità sulle supposizioni narrative precedenti.
 
-Esempi obbligatori:
-PLAYER: "Io ho ucciso il drago."
-=> PLAYER ha ucciso il drago.
-CURRENT_CHARACTER NON ha ucciso il drago per effetto di questa frase.
+ESEMPI:
+"Io ho ucciso il drago." => PLAYER ha ucciso il drago.
+"Hai ucciso il drago?" => la domanda riguarda CURRENT_CHARACTER.
+"Perché l'ho fatto?" => la domanda riguarda un'azione del PLAYER.
+"Perché l'hai fatto?" => la domanda riguarda un'azione di CURRENT_CHARACTER.
 
-PLAYER: "Hai ucciso il drago?"
-=> CURRENT_CHARACTER ha ucciso il drago?
-
-PLAYER: "Perché l'ho fatto?"
-=> PLAYER sta chiedendo perché PLAYER l'ha fatto.
-NON significa "perché l'ha fatto CURRENT_CHARACTER?".
-
-PLAYER: "Perché l'hai fatto?"
-=> PLAYER sta chiedendo perché CURRENT_CHARACTER l'ha fatto.
-
-CONFLITTO TRA CONTESTO E PRONOME
-Se una memoria o un evento dice che CURRENT_CHARACTER ha fatto X, ma il PLAYER dice "io ho fatto X", NON trasferire automaticamente X a CURRENT_CHARACTER. Sono due affermazioni diverse e possono rappresentare un nuovo fatto, una correzione o una contraddizione da chiarire.
-
-CONTINUITÀ
-MEMORIE, EVENTI e CONTINUITY_FACTS sono fatti persistenti del mondo. Non riscrivere il passato per rendere più elegante la risposta. Se esiste una contraddizione, trattala come contraddizione narrativa.
-Non inventare eventi, persone, luoghi, ricordi, relazioni o conoscenze.
+CONFLITTI
+Se una memoria dice che CURRENT_CHARACTER ha fatto X, ma il PLAYER dice "io ho fatto X", NON trasferire l'azione. Può essere una nuova informazione o una contraddizione.
+MEMORIE, EVENTI e CONTINUITY_FACTS sono fatti persistenti. Non riscrivere il passato per rendere elegante la risposta.
 
 CONOSCENZA
-Conosci solamente ciò che CURRENT_CHARACTER può conoscere dal contesto, dalle proprie memorie, dagli eventi conosciuti e dalla conversazione. Non sei onnisciente.
+Conosci solo ciò che CURRENT_CHARACTER può conoscere dal contesto. Non sei onnisciente.
+Non inventare eventi, persone, luoghi, ricordi, relazioni o conoscenze.
 
 PERSONALITÀ
-Interpreta {character_name} in base a personalità, psicologia, stato e storia presenti nel contesto. Non aggiungere automaticamente mistero, dramma o colpi di scena.
-
-NESSUNA TRAMA FORZATA
-Una conversazione normale può rimanere normale. Non aggiungere automaticamente missioni, combattimenti, misteri, pericoli o personaggi.
-
-MEMORIE
-Crea una memoria solo per eventi realmente importanti e duraturi per CURRENT_CHARACTER. Le memorie devono appartenere a CURRENT_CHARACTER.
+Interpreta il personaggio in base ai dati presenti. Una conversazione normale può rimanere normale. Non aggiungere automaticamente misteri, drammi, combattimenti o missioni.
 
 AZIONI CONSENTITE
 1. character_reaction
 2. create_memory
 3. relationship_change
 4. world_action
-Il game engine valida le azioni.
 
-CHARACTER_REACTION obbligatoria:
+character_reaction è obbligatoria e deve avere character_id = {character_id}.
+
+SCHEMA DI RISPOSTA OBBLIGATORIO
+Devi restituire ESATTAMENTE un JSON con questa struttura:
 {{
-  "type": "character_reaction",
-  "character_id": {character_id},
-  "emotion": "emozione di CURRENT_CHARACTER",
-  "thought": "pensiero di CURRENT_CHARACTER",
-  "intention": "intenzione di CURRENT_CHARACTER",
-  "goal": "{current_goal}"
+  "narration": "testo della risposta di {character_name}",
+  "actions": [
+    {{
+      "type": "character_reaction",
+      "character_id": {character_id},
+      "emotion": "emozione",
+      "thought": "pensiero di {character_name}",
+      "intention": "intenzione di {character_name}",
+      "goal": "{current_goal}"
+    }}
+  ]
 }}
 
-CONTROLLO FINALE OBBLIGATORIO
-Prima del JSON verifica:
+"narration" DEVE essere una stringa non vuota.
+"actions" DEVE essere un array.
+Non usare altri campi al livello principale.
+Non mettere la narration dentro actions.
+Non restituire markdown, codice o spiegazioni fuori dal JSON.
+
+CONTROLLO FINALE
 1. PLAYER e CURRENT_CHARACTER sono distinti.
-2. Ogni prima persona appartiene al PLAYER.
-3. Ogni seconda persona rivolta al personaggio appartiene a CURRENT_CHARACTER.
-4. Non hai trasferito azioni tra i due soggetti.
+2. Prima persona = PLAYER.
+3. Seconda persona = CURRENT_CHARACTER.
+4. Non hai trasferito azioni tra i due.
 5. Non hai alterato fatti persistenti.
 6. Non hai controllato il PLAYER.
 7. character_reaction appartiene a ID {character_id}.
-Rispondi esclusivamente con JSON valido.
+8. narration è presente ed è una stringa.
+9. actions è presente ed è un array.
 """.strip()
 
     user_prompt = f"""
 CONTESTO AUTOREVOLE DEL GAME ENGINE:
 {context_json}
 
-=========================================================
-MESSAGGIO ATTUALE DEL PLAYER
-=========================================================
+MESSAGGIO ATTUALE DEL PLAYER:
 {player_input}
 
-=========================================================
-SUBJECT LOCK DETERMINISTICO
-=========================================================
+SUBJECT LOCK:
 {subject_lock}
 
-=========================================================
-ISTRUZIONI
-=========================================================
 Il PLAYER sta parlando con CURRENT_CHARACTER = {character_name}.
-Rispondi direttamente al messaggio.
-Mantieni la continuità con memorie ed eventi persistenti.
-Rispetta il soggetto grammaticale di ogni frase.
-Non controllare il PLAYER e non inventare fatti.
-Restituisci esclusivamente JSON valido.
+Rispondi direttamente al messaggio, mantenendo la continuità con memorie ed eventi persistenti.
+Rispetta il soggetto grammaticale e restituisci esclusivamente il JSON richiesto.
 """.strip()
 
     response = ask_ollama(system_prompt, user_prompt)
@@ -268,4 +237,16 @@ Restituisci esclusivamente JSON valido.
         raise ValueError("Ollama ha restituito JSON non valido.") from error
     if not isinstance(result, dict):
         raise ValueError("La risposta AI deve essere un oggetto JSON.")
+
+    # Normalizzazione difensiva: non permettere che una risposta quasi valida
+    # mandi in errore il pannello. La validazione completa resta al game engine.
+    narration = result.get("narration")
+    actions = result.get("actions")
+    if not isinstance(narration, str) or not narration.strip():
+        # Alcuni modelli producono il testo in una chiave alternativa: non
+        # inventiamo contenuto, ma falliamo con un errore esplicito.
+        raise ValueError("La risposta AI non contiene una narration valida.")
+    if not isinstance(actions, list):
+        raise ValueError("La risposta AI non contiene un array actions valido.")
+
     return json.dumps(result, ensure_ascii=False)
