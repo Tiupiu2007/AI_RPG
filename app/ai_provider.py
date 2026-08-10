@@ -8,31 +8,6 @@ OLLAMA_TIMEOUT = 120
 TEMPERATURE = 0.65
 NUM_CTX = 16384
 
-AI_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "narration": {"type": "string"},
-        "actions": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"type": "string"},
-                    "character_id": {"type": "integer"},
-                    "emotion": {"type": "string"},
-                    "thought": {"type": "string"},
-                    "intention": {"type": "string"},
-                    "goal": {"type": "string"},
-                },
-                "required": ["type", "character_id", "emotion", "thought", "intention", "goal"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["narration", "actions"],
-    "additionalProperties": False,
-}
-
 
 def ask_ollama(system_prompt, user_prompt):
     payload = {
@@ -43,7 +18,7 @@ def ask_ollama(system_prompt, user_prompt):
         ],
         "stream": False,
         "think": False,
-        "format": AI_RESPONSE_SCHEMA,
+        "format": "json",
         "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
     }
     try:
@@ -143,15 +118,9 @@ def _parse_ai_json(response: str) -> dict:
         match = re.search(r"\{.*\}", response, flags=re.DOTALL)
         if not match:
             raise ValueError(f"Qwen non ha restituito JSON valido: {response[:500]}")
-        try:
-            result = json.loads(match.group(0))
-        except json.JSONDecodeError as error:
-            raise ValueError(f"Qwen ha restituito JSON non interpretabile: {response[:500]}") from error
+        result = json.loads(match.group(0))
     if isinstance(result, str):
-        try:
-            result = json.loads(result)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"Qwen ha restituito una stringa invece del JSON del game engine: {response[:500]}") from error
+        result = json.loads(result)
     if not isinstance(result, dict):
         raise ValueError(f"La risposta AI deve essere un oggetto JSON: {response[:500]}")
     return result
@@ -274,5 +243,4 @@ Rispondi direttamente al PLAYER come {character_name}. Restituisci solo il JSON 
     result = _normalize_result(_parse_ai_json(response), character_id, current_goal)
     if result is None:
         raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:1000]}")
-
     return json.dumps(result, ensure_ascii=False)
