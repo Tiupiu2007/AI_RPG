@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.ai_provider import ask_ollama
@@ -33,11 +34,59 @@ def _character_payload(character: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_json(raw: str) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        raise ValueError("L'IA dello scontro ha restituito una risposta vuota.")
+
+    # Qwen può occasionalmente restituire blocchi markdown anche quando viene
+    # richiesto JSON. Rimuoviamo solo il contenitore, senza alterare il JSON.
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text).strip()
+
+    # Se il modello ha aggiunto testo prima/dopo l'oggetto, recuperiamo il primo
+    # oggetto JSON bilanciato rispettando stringhe ed escape.
+    if text.startswith("{") and text.endswith("}"):
+        return text
+
+    start = text.find("{")
+    if start < 0:
+        raise ValueError(f"L'IA dello scontro non ha restituito un oggetto JSON: {text[:500]}")
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+
+    raise ValueError(f"L'IA dello scontro ha restituito JSON incompleto: {text[:500]}")
+
+
 def _parse_result(raw: str) -> dict[str, Any]:
+    extracted = _extract_json(raw)
     try:
-        result = json.loads(raw)
+        result = json.loads(extracted)
     except json.JSONDecodeError as error:
-        raise ValueError("L'IA dello scontro ha restituito JSON non valido.") from error
+        raise ValueError(
+            "L'IA dello scontro ha restituito JSON non valido. "
+            f"Risposta ricevuta: {extracted[:1000]}"
+        ) from error
     if not isinstance(result, dict):
         raise ValueError("Il risultato dello scontro deve essere un oggetto JSON.")
     if not isinstance(result.get("rounds"), list):
@@ -74,7 +123,13 @@ Non favorire automaticamente il primo o il più potente: valuta tattica, terreno
 Lo scontro deve avere un inizio, sviluppo, svolte e conclusione. Può essere breve o lungo, ma deve sembrare una scena completa di GDR.
 I personaggi possono subire ferite, stanchezza, paura, esitazioni e conseguenze coerenti. Non uccidere un personaggio senza che lo scontro lo giustifichi.
 Non modificare il database: questa è una simulazione narrativa autonoma.
-Rispondi esclusivamente con JSON valido.
+
+REGOLE JSON:
+- Restituisci SOLO un singolo oggetto JSON.
+- Non usare markdown, non usare ``` e non aggiungere spiegazioni prima o dopo il JSON.
+- Tutti i valori testuali devono essere stringhe JSON valide.
+- Non inserire virgolette non escapate dentro le stringhe.
+- Non lasciare commenti o trailing commas.
 """.strip()
 
     user_prompt = f"""
@@ -87,7 +142,7 @@ COMBATTENTE B:
 STILE RICHIESTO: {requested_style}
 
 Genera lo scontro completo.
-Formato obbligatorio:
+Usa esattamente questa struttura JSON:
 {{
   "title": "titolo breve dello scontro",
   "introduction": "contesto e inizio dello scontro",
