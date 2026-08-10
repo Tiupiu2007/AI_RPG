@@ -55,7 +55,6 @@ def create_memory(
 
     connection = get_connection()
     try:
-        # Una stessa informazione non deve moltiplicarsi a ogni turno.
         existing = connection.execute(
             """
             SELECT id
@@ -200,7 +199,6 @@ def get_recent_events(
         try:
             payload = json.loads(row["payload"] or "{}")
         except (TypeError, json.JSONDecodeError):
-            # Un evento corrotto non deve impedire il caricamento del personaggio.
             payload = {}
         result.append({
             "id": row["id"],
@@ -210,3 +208,69 @@ def get_recent_events(
             "created_at": row["created_at"],
         })
     return result
+
+
+def reset_character_history(
+    character_id: int,
+    clear_relationships: bool = False,
+) -> dict[str, int]:
+    """Cancella la cronologia persistente di un personaggio per test puliti.
+
+    Cancella memorie, eventi e conversazione salvata in ``extra_data``.
+    Le relazioni vengono mantenute per default perché appartengono allo stato
+    sociale persistente; passare ``clear_relationships=True`` le cancella.
+    """
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("character_id non valido.")
+    if not isinstance(clear_relationships, bool):
+        raise ValueError("clear_relationships deve essere booleano.")
+
+    connection = get_connection()
+    try:
+        character = connection.execute(
+            "SELECT id, extra_data FROM characters WHERE id = ?",
+            (character_id,),
+        ).fetchone()
+        if character is None:
+            raise ValueError(f"Personaggio con ID {character_id} non trovato.")
+
+        memories_deleted = connection.execute(
+            "DELETE FROM memories WHERE character_id = ?",
+            (character_id,),
+        ).rowcount
+        events_deleted = connection.execute(
+            "DELETE FROM events WHERE character_id = ?",
+            (character_id,),
+        ).rowcount
+
+        try:
+            extra = json.loads(character["extra_data"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            extra = {}
+        if not isinstance(extra, dict):
+            extra = {}
+
+        # La conversazione è una cache narrativa, non una memoria persistente.
+        extra.pop("conversation", None)
+        extra.pop("state", None)
+
+        connection.execute(
+            "UPDATE characters SET extra_data = ? WHERE id = ?",
+            (json.dumps(extra, ensure_ascii=False), character_id),
+        )
+
+        relationships_deleted = 0
+        if clear_relationships:
+            relationships_deleted = connection.execute(
+                "DELETE FROM relationships WHERE character_a_id = ? OR character_b_id = ?",
+                (character_id, character_id),
+            ).rowcount
+
+        connection.commit()
+        return {
+            "memories_deleted": int(memories_deleted),
+            "events_deleted": int(events_deleted),
+            "relationships_deleted": int(relationships_deleted),
+        }
+    finally:
+        connection.close()
