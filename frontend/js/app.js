@@ -116,7 +116,6 @@ async function resetCurrentCharacterHistory() {
 
     try {
         const result = await resetCharacterHistory(character.id, false);
-        // La cache locale non deve conservare una vecchia conversazione/stato.
         if (character.extra && typeof character.extra === "object") {
             delete character.extra.conversation;
             delete character.extra.state;
@@ -130,8 +129,6 @@ async function resetCurrentCharacterHistory() {
     }
 }
 
-// API globale per l'interfaccia RPG/chat: il pulsante "Pulisci chat"
-// può distinguere il reset della sola UI dal reset persistente del personaggio.
 window.aiRpgResetCharacterHistory = resetCurrentCharacterHistory;
 
 function onGenerated(generated) {
@@ -144,6 +141,18 @@ async function runGeneration(options = {}) {
     catch { /* L'errore viene già mostrato dal modulo di generazione. */ }
 }
 
+function addArenaButton() {
+    const actions = document.querySelector(".topbar-actions");
+    if (!actions || document.getElementById("arenaButton")) return;
+    const button = document.createElement("button");
+    button.id = "arenaButton";
+    button.className = "secondary-button";
+    button.textContent = "⚔ Arena";
+    button.title = "Simula uno scontro tra due personaggi";
+    button.addEventListener("click", () => { window.location.href = "/battle.html"; });
+    actions.appendChild(button);
+}
+
 async function initializeApp() {
     try {
         initializeCharacterDescriptionUI();
@@ -152,6 +161,7 @@ async function initializeApp() {
         initializeNavigation();
         initializeRaceSelector();
         initializeInputListeners();
+        addArenaButton();
         document.getElementById("generateButton")?.addEventListener("click", () => runGeneration());
         window.addEventListener("ai-rpg-generate-character", event => runGeneration(event.detail || {}));
         window.addEventListener("ai-rpg-reset-character-history", resetCurrentCharacterHistory);
