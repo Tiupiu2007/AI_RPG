@@ -3,7 +3,7 @@ import re
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "qwen3:8b"
+MODEL_NAME = "qwen3:30b-a3b-instruct-2507-q4_K_M"
 OLLAMA_TIMEOUT = 120
 TEMPERATURE = 0.65
 NUM_CTX = 16384
