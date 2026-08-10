@@ -21,6 +21,7 @@ def ask_ollama(system_prompt, user_prompt):
         ],
         "stream": False,
         "format": "json",
+        "think": False,
         "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
     }
     try:
@@ -34,9 +35,12 @@ def ask_ollama(system_prompt, user_prompt):
     except ValueError as error:
         raise ValueError("Ollama ha restituito una risposta HTTP non interpretabile come JSON.") from error
     message = data.get("message")
-    if not isinstance(message, dict) or not isinstance(message.get("content"), str):
-        raise ValueError("Risposta Ollama priva di un campo message.content valido.")
-    return message["content"].strip()
+    if not isinstance(message, dict):
+        raise ValueError(f"Risposta Ollama senza message valido: {str(data)[:1000]}")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError(f"Ollama ha restituito message.content vuoto: {str(data)[:1000]}")
+    return content.strip()
 
 
 def build_ai_context(character_context):
@@ -45,16 +49,15 @@ def build_ai_context(character_context):
     character = character_context.get("character")
     if not isinstance(character, dict):
         raise ValueError("Il contesto non contiene un personaggio valido.")
-
     roles = character_context.get("roles", {})
     if not isinstance(roles, dict):
         roles = {}
     player = roles.get("player", {})
-    current_character = roles.get("current_character", {})
+    current_character = roles.get("current_character", character)
     if not isinstance(player, dict):
         player = {}
     if not isinstance(current_character, dict):
-        current_character = {}
+        current_character = character
 
     def safe_list(key):
         value = character_context.get(key, [])
@@ -66,10 +69,6 @@ def build_ai_context(character_context):
     scene = character_context.get("scene", {})
     if not isinstance(scene, dict):
         scene = {}
-    recent_conversation = safe_list("recent_conversation")
-    recent_events = safe_list("recent_events")
-    continuity_facts = safe_list("continuity_facts")
-
     return {
         "roles": {"PLAYER": player, "CURRENT_CHARACTER": current_character},
         "character": character,
@@ -83,9 +82,9 @@ def build_ai_context(character_context):
             "player_id": scene.get("player_id"),
             "involved_characters": scene.get("involved_characters", []),
         },
-        "recent_conversation": recent_conversation,
-        "recent_events": recent_events,
-        "continuity_facts": continuity_facts,
+        "recent_conversation": safe_list("recent_conversation"),
+        "recent_events": safe_list("recent_events"),
+        "continuity_facts": safe_list("continuity_facts"),
     }
 
 
@@ -189,26 +188,6 @@ CHARACTER_REACTION obbligatoria:
   "goal": "{current_goal}"
 }}
 
-CREATE_MEMORY:
-{{
-  "type": "create_memory",
-  "character_id": {character_id},
-  "content": "fatto importante realmente avvenuto",
-  "memory_type": "evento",
-  "importance": 7,
-  "secret": false
-}}
-
-RELATIONSHIP_CHANGE:
-{{
-  "type": "relationship_change",
-  "character_a_id": {character_id},
-  "character_b_id": 5,
-  "trust": -5
-}}
-
-WORLD_ACTION usa solamente ID realmente presenti nel contesto. Il game engine decide se l'azione è possibile.
-
 CONTROLLO FINALE OBBLIGATORIO
 Prima del JSON controlla:
 1. Chi è PLAYER?
@@ -225,22 +204,13 @@ Rispondi esclusivamente con JSON valido.
 
     user_prompt = f"""
 CONTESTO AUTOREVOLE DEL GAME ENGINE:
-
 {context_json}
 
-=========================================================
-MESSAGGIO ATTUALE DEL PLAYER
-=========================================================
-
+MESSAGGIO ATTUALE DEL PLAYER:
 {player_input}
 
-=========================================================
-ISTRUZIONI
-=========================================================
-
-Rispondi direttamente al messaggio attuale del PLAYER.
+Rispondi direttamente al messaggio attuale del PLAYER come {character_name}.
 Il PLAYER sta parlando con CURRENT_CHARACTER = {character_name}.
-Quindi, salvo indicazioni esplicite contrarie, "tu" significa {character_name} e "io" significa PLAYER.
 Mantieni la continuità con memorie ed eventi persistenti.
 Non cambiare il soggetto di un'azione.
 Non controllare il PLAYER.
@@ -252,7 +222,10 @@ Restituisci esclusivamente JSON valido.
     try:
         result = json.loads(response)
     except json.JSONDecodeError as error:
-        raise ValueError("Ollama ha restituito JSON non valido.") from error
+        raise ValueError(f"Ollama ha restituito JSON non valido: {response[:1000]}") from error
     if not isinstance(result, dict):
         raise ValueError("La risposta AI deve essere un oggetto JSON.")
+    narration = result.get("narration")
+    if not isinstance(narration, str) or not narration.strip():
+        raise ValueError(f"La risposta AI non contiene una narration valida. Risposta ricevuta: {response[:1000]}")
     return json.dumps(result, ensure_ascii=False)
