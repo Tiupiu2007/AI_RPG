@@ -2,7 +2,7 @@ const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 let roomId = params.get('room');
 let token = params.get('token');
-const state = { characters: [], room: null, busy: false, shareLinks: null };
+const state = { characters: [], room: null, busy: false, shareLinks: null, polling: false };
 
 function fullName(c) {
   const i = c.identity || c;
@@ -44,19 +44,18 @@ function renderShareLinks(data) {
     <label>🎮 ${esc(data.player_b_name || 'Giocatore B')}<input readonly value="${esc(data.player_b_url)}" onclick="this.select()"></label>
     <label>👁 ${esc(data.spectator_name || 'Spettatore / Server')}<input readonly value="${esc(data.spectator_url)}" onclick="this.select()"></label>
     <small>Seleziona e copia il link del relativo personaggio. Il link spettatore è quello da conservare tu.</small>`;
-
-  const arenaLinks = $('arenaLinks');
-  if (arenaLinks) {
-    arenaLinks.classList.remove('hidden');
-    arenaLinks.innerHTML = links.innerHTML;
-  }
 }
 
 async function createRoom() {
-  const body = { character_a_id: Number($('fighterA').value), character_b_id: Number($('fighterB').value) };
+  const aId = Number($('fighterA').value);
+  const bId = Number($('fighterB').value);
+  const body = { character_a_id: aId, character_b_id: bId };
   const r = await fetch('/api/pvp/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Errore creazione stanza.');
 
+  data.player_a_name = fullName(findCharacter(aId));
+  data.player_b_name = fullName(findCharacter(bId));
+  data.spectator_name = 'Spettatore / Server';
   renderShareLinks(data);
 
   // Il server passa automaticamente alla vista spettatore, ma i link restano visibili.
@@ -121,7 +120,6 @@ async function refresh() {
     state.room = data;
     $('arena').classList.remove('hidden');
     renderFighters(data); renderActions(data); renderLog(data);
-    // Se la stanza è stata creata da questa pagina, manteniamo i link visibili.
     if (!state.shareLinks) $('setup').classList.add('hidden');
   } catch (e) { $('roomLabel').textContent = e.message; }
 }
