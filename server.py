@@ -9,7 +9,7 @@ import hashlib
 from app.ai_provider import ask_character, MODEL_NAME
 from app.character_interaction import process_character_turn
 from app.battle import simulate_battle
-from app.pvp import create_room, serialize_room, perform_action
+from app.pvp import create_room, serialize_room, perform_action, get_editor_character_id
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
 from app.characters.character_from_description import generate_character_from_description
@@ -226,6 +226,27 @@ class RPGServer(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[SERVER] {self.address_string()} - {format % args}")
 
+    def _is_local_admin(self) -> bool:
+        return self.client_address[0] in {"127.0.0.1", "::1", "localhost"}
+
+    def _editor_character_id(self, query: dict[str, list[str]]) -> int | None:
+        room_id = query.get("room", [""])[0]
+        token = query.get("token", [""])[0]
+        if not room_id or not token:
+            return None
+        return get_editor_character_id(room_id, token)
+
+    def _require_admin(self) -> None:
+        if not self._is_local_admin():
+            raise PermissionError("Questa operazione è riservata al server/amministratore.")
+
+    def _require_character_access(self, query: dict[str, list[str]], character_id: int) -> None:
+        if self._is_local_admin():
+            return
+        own_id = self._editor_character_id(query)
+        if own_id != character_id:
+            raise PermissionError("Puoi vedere solo il personaggio assegnato alla tua stanza PvP.")
+
     def do_OPTIONS(self):
         json_response(self, {"success": True})
 
@@ -242,10 +263,13 @@ class RPGServer(BaseHTTPRequestHandler):
                 json_response(self, [{"id": language.id, "name": language.name, "prevalence": language.prevalence, "difficulty": language.difficulty} for language in get_available_languages()])
                 return
             if request_path == "/api/characters":
+                if not self._is_local_admin():
+                    raise PermissionError("L'elenco completo dei personaggi è disponibile solo sul server.")
                 json_response(self, get_all_identities())
                 return
             if request_path.startswith("/api/characters/"):
                 character_id = int(request_path.rsplit("/", 1)[1])
+                self._require_character_access(query, character_id)
                 character = get_character(character_id)
                 if character is None:
                     json_response(self, {"error": "Personaggio non trovato."}, 404)
@@ -264,13 +288,15 @@ class RPGServer(BaseHTTPRequestHandler):
             if request_path == "/api/ai-status":
                 provider_path = Path(__file__).resolve().parent / "app" / "ai_provider.py"
                 code_hash = hashlib.sha256(provider_path.read_bytes()).hexdigest()[:12] if provider_path.exists() else "missing"
-                json_response(self, {
-                    "model": MODEL_NAME,
-                    "provider_file": str(provider_path),
-                    "provider_hash": code_hash,
-                })
+                json_response(self, {"model": MODEL_NAME, "provider_file": str(provider_path), "provider_hash": code_hash})
                 return
+
+            relative = request_path.lstrip("/") or "index.html"
+            if relative == "index.html" and not self._is_local_admin() and self._editor_character_id(query) is None:
+                raise PermissionError("Editor non disponibile. Usa il link personale ricevuto per la partita PvP.")
             self.serve_frontend()
+        except PermissionError as error:
+            json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
@@ -283,6 +309,7 @@ class RPGServer(BaseHTTPRequestHandler):
             request_path = parsed.path.rstrip("/")
 
             if request_path == "/api/pvp/create":
+                self._require_admin()
                 data = self.read_json()
                 character_a_id = int(data.get("character_a_id"))
                 character_b_id = int(data.get("character_b_id"))
@@ -291,6 +318,8 @@ class RPGServer(BaseHTTPRequestHandler):
                 result["player_a_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['player_a_token']}"
                 result["player_b_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['player_b_token']}"
                 result["spectator_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['spectator_token']}"
+                result["player_a_character_url"] = f"http://{host}/index.html?room={result['room_id']}&token={result['player_a_token']}"
+                result["player_b_character_url"] = f"http://{host}/index.html?room={result['room_id']}&token={result['player_b_token']}"
                 json_response(self, result)
                 return
 
@@ -306,6 +335,7 @@ class RPGServer(BaseHTTPRequestHandler):
                 return
 
             if request_path == "/api/generate-character":
+                self._require_admin()
                 data = self.read_json()
                 description = data.get("description", "")
                 source = data.get("source", "system")
@@ -313,8 +343,8 @@ class RPGServer(BaseHTTPRequestHandler):
                 json_response(self, generate_character(description, source, importance))
                 return
 
-            # Endpoint legacy: mantiene la simulazione narrativa IA separata dal PvP.
             if request_path == "/api/battle":
+                self._require_admin()
                 data = self.read_json()
                 character_a_id = int(data.get("character_a_id"))
                 character_b_id = int(data.get("character_b_id"))
@@ -324,20 +354,18 @@ class RPGServer(BaseHTTPRequestHandler):
                 return
 
             if request_path == "/api/character-interaction":
+                self._require_admin()
                 data = self.read_json()
                 character_id = int(data.get("character_id"))
                 player_input = str(data.get("message", "")).strip()
                 if not player_input:
                     raise ValueError("Il messaggio non può essere vuoto.")
-                result = process_character_turn(
-                    character_id,
-                    player_input,
-                    data.get("recent_conversation", []),
-                )
+                result = process_character_turn(character_id, player_input, data.get("recent_conversation", []))
                 json_response(self, result)
                 return
 
             if request_path == "/api/character-history/reset":
+                self._require_admin()
                 data = self.read_json()
                 character_id = int(data.get("character_id"))
                 clear_relationships = bool(data.get("clear_relationships", False))
@@ -347,6 +375,7 @@ class RPGServer(BaseHTTPRequestHandler):
                 return
 
             if request_path == "/api/characters":
+                self._require_admin()
                 data = self.read_json()
                 identity = identity_from_dict(data.get("identity", data))
                 languages = languages_from_dict(data.get("languages", [])) or get_race_languages(identity.race)
@@ -373,6 +402,8 @@ class RPGServer(BaseHTTPRequestHandler):
                 return
 
             json_response(self, {"error": "Endpoint non trovato."}, 404)
+        except PermissionError as error:
+            json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
@@ -381,6 +412,7 @@ class RPGServer(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         try:
+            self._require_admin()
             request_path = self.path.split("?", 1)[0].rstrip("/")
             if request_path.startswith("/api/characters/"):
                 character_id = int(request_path.rsplit("/", 1)[1])
@@ -389,9 +421,12 @@ class RPGServer(BaseHTTPRequestHandler):
                 json_response(self, {"success": True, "id": character_id})
                 return
             json_response(self, {"error": "Endpoint non trovato."}, 404)
+        except PermissionError as error:
+            json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
+            print("[SERVER ERROR]", error)
             json_response(self, {"error": str(error)}, 500)
 
     def read_json(self):
@@ -433,7 +468,7 @@ def run_server():
     print("AI STATUS: http://127.0.0.1:8000/api/ai-status")
     print("PVP ARENA: http://127.0.0.1:8000/battle.html")
     print("LISTEN: 0.0.0.0:8000")
-    print("=" * 60)
+    print("=​" * 60)
     server = HTTPServer((HOST, PORT), RPGServer)
     print(f"Server avviato sulla porta {PORT}")
     try:
