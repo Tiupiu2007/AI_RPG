@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="it">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI RPG — Mazzo PvP</title><link rel="stylesheet" href="deck.css"></head>
+<body>
+<main class="deck-app">
+<header class="topbar"><div><div class="eyebrow">AI RPG / PVP</div><h1>MAZZO DEL PERSONAGGIO</h1><p id="subtitle">Costruisci il tuo mazzo scegliendo tra le carte che il personaggio può imparare.</p></div><div class="top-actions"><a id="arenaLink" href="/battle.html">⚔ Arena</a><a id="sheetLink" href="/">📋 Scheda</a></div></header>
+<section id="message" class="message hidden"></section>
+<section class="hero card"><div><span class="label">PERSONAGGIO</span><h2 id="characterName">Caricamento...</h2><p id="characterInfo"></p></div><div class="deck-stats"><div><b id="knownCount">0</b><span>CARTE CONOSCIUTE</span></div><div><b id="deckCount">0</b><span>CARTE NEL MAZZO</span></div></div></section>
+<div class="tabs"><button class="tab active" data-filter="all">TUTTE</button><button class="tab" data-filter="known">CONOSCIUTE</button><button class="tab" data-filter="deck">NEL MAZZO</button><button class="tab" data-filter="blocked">BLOCCATE</button></div>
+<section id="catalog" class="catalog"></section>
+</main><script src="deck.js"></script></body></html>
