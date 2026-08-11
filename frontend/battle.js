@@ -11,6 +11,24 @@ function fullName(c) {
 function esc(v) { return String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c])); }
 function bar(value, max) { const pct = max ? Math.max(0, Math.min(100, value / max * 100)) : 0; return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
 
+function updateBackButton(room) {
+  const button = $('backButton');
+  if (!button) return;
+  if (room?.is_spectator) {
+    button.textContent = '← Arena';
+    button.href = '/battle.html';
+    return;
+  }
+  const ownId = Number(room?.you_are);
+  if (Number.isInteger(ownId) && roomId && token) {
+    button.textContent = '📋 Scheda personaggio';
+    button.href = `/index.html?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`;
+    return;
+  }
+  button.textContent = '← Editor personaggi';
+  button.href = '/';
+}
+
 async function loadCharacters() {
   const r = await fetch('/api/characters');
   if (!r.ok) throw new Error('Impossibile caricare i personaggi.');
@@ -89,6 +107,7 @@ function renderActions(room) {
   const myTurn = own && room.current_turn_character_id === own.character_id && room.phase === 'active';
   $('roleBadge').textContent = room.is_spectator ? 'SPETTATORE / SERVER' : `GIOCATORE · ${esc(own.name)}`;
   $('actions').classList.toggle('hidden', room.is_spectator);
+  updateBackButton(room);
   if (!own) return;
   $('apLabel').textContent = `PA ${own.action_points}/${own.max_action_points}`;
   const opponent = Object.values(room.combatants).find(c => c.character_id !== own.character_id);
