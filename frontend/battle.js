@@ -1,92 +1,121 @@
-const state = { characters: [] };
-
 const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const roomId = params.get('room');
+const token = params.get('token');
+const state = { characters: [], room: null, busy: false };
 
 function fullName(c) {
   const i = c.identity || c;
-  return [i.name, i.surname].filter(Boolean).join(" ") || `Personaggio #${c.id}`;
+  return [i.name, i.surname].filter(Boolean).join(' ') || `Personaggio #${c.id}`;
 }
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+function bar(value, max) { const pct = max ? Math.max(0, Math.min(100, value / max * 100)) : 0; return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
 
 async function loadCharacters() {
-  const response = await fetch('/api/characters');
-  if (!response.ok) throw new Error('Impossibile caricare i personaggi.');
-  state.characters = await response.json();
+  const r = await fetch('/api/characters');
+  if (!r.ok) throw new Error('Impossibile caricare i personaggi.');
+  state.characters = await r.json();
   for (const select of [$('fighterA'), $('fighterB')]) {
     for (const c of state.characters) {
-      const option = document.createElement('option');
-      option.value = c.id;
-      option.textContent = fullName(c);
-      select.appendChild(option);
+      const o = document.createElement('option'); o.value = c.id; o.textContent = fullName(c); select.appendChild(o);
     }
   }
-  update();
+  updateSetup();
 }
-
-function get(id) {
-  return state.characters.find(c => Number(c.id) === Number(id));
-}
-
+function findCharacter(id) { return state.characters.find(c => Number(c.id) === Number(id)); }
 function updatePreview(side) {
-  const id = $(side === 'A' ? 'fighterA' : 'fighterB').value;
-  const c = get(id);
-  const target = $('preview' + side);
+  const c = findCharacter($(side === 'A' ? 'fighterA' : 'fighterB').value), target = $('preview' + side);
   if (!c) { target.textContent = 'Nessun combattente selezionato.'; return; }
-  const i = c.identity || c;
-  target.innerHTML = `<strong>${fullName(c)}</strong><span>${i.race || 'Razza sconosciuta'} · ${i.age || '?'} anni</span>`;
+  const i = c.identity || c; target.innerHTML = `<strong>${esc(fullName(c))}</strong><span>${esc(i.race || 'Razza')} · ${esc(i.age || '?')} anni</span>`;
 }
-
-function update() {
+function updateSetup() {
   updatePreview('A'); updatePreview('B');
   const a = $('fighterA').value, b = $('fighterB').value;
-  $('fightButton').disabled = !a || !b || a === b;
+  $('createRoom').disabled = !a || !b || a === b;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+async function createRoom() {
+  const body = { character_a_id: Number($('fighterA').value), character_b_id: Number($('fighterB').value) };
+  const r = await fetch('/api/pvp/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Errore creazione stanza.');
+  $('links').classList.remove('hidden');
+  $('links').innerHTML = `<strong>STANZA ${esc(data.room_id)}</strong><label>Giocatore A<input readonly value="${esc(data.player_a_url)}"></label><label>Giocatore B<input readonly value="${esc(data.player_b_url)}"></label><label>Spettatore / Server<input readonly value="${esc(data.spectator_url)}"></label><small>Invia i due link giocatore agli amici. Conserva il link spettatore.</small>`;
+  history.replaceState({}, '', `/battle.html?room=${data.room_id}&token=${data.spectator_token}`);
+  location.reload();
 }
 
-function render(result) {
-  $('title').textContent = result.title || 'Scontro';
-  $('introduction').textContent = result.introduction || '';
-  $('winner').textContent = result.winner || 'Pareggio';
-  $('ending').textContent = result.ending || '';
-  $('aftermath').textContent = result.aftermath || '';
-  $('rounds').innerHTML = (result.rounds || []).map((r, index) => `
-    <article class="round card">
-      <div class="round-number">ROUND ${escapeHtml(r.round ?? index + 1)}</div>
-      <h3>${escapeHtml(r.title || `Svolta ${index + 1}`)}</h3>
-      <p>${escapeHtml(r.narration || '')}</p>
-      ${Array.isArray(r.events) ? `<ul>${r.events.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
-      <div class="status"><span>${escapeHtml(r.status?.fighter_a || '')}</span><span>${escapeHtml(r.status?.fighter_b || '')}</span></div>
-    </article>`).join('');
-  $('loading').classList.add('hidden');
-  $('result').classList.remove('hidden');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function renderFighters(room) {
+  const ids = room.turn_order.length ? room.turn_order : Object.keys(room.combatants).map(Number);
+  $('fighters').innerHTML = ids.map(id => {
+    const c = room.combatants[String(id)];
+    const active = room.current_turn_character_id === c.character_id;
+    return `<article class="fighter-card ${active ? 'active' : ''} ${c.defeated ? 'defeated' : ''}">
+      <div class="fighter-head"><div><span class="fighter-name">${esc(c.name)}</span><span class="fighter-status">${esc(c.status)}</span></div><b>${active ? 'TURNO' : ''}</b></div>
+      <div class="resource"><span>HP ${c.health}/${c.max_health}</span>${bar(c.health,c.max_health)}</div>
+      <div class="resource"><span>STAMINA ${c.stamina}/${c.max_stamina}</span>${bar(c.stamina,c.max_stamina)}</div>
+      <div class="resource"><span>MANA ${c.mana}/${c.max_mana}</span>${bar(c.mana,c.max_mana)}</div>
+      <div class="conditions">${(c.conditions || []).map(x => `<span>${esc(x)}</span>`).join('')}</div>
+    </article>`;
+  }).join('');
 }
 
-async function fight() {
-  const a = Number($('fighterA').value), b = Number($('fighterB').value);
-  if (!a || !b || a === b) return;
-  $('fightButton').disabled = true;
-  $('loading').classList.remove('hidden');
-  $('result').classList.add('hidden');
+function renderActions(room) {
+  const ownId = room.you_are;
+  const own = ownId && ownId !== 'spectator' ? room.combatants[String(ownId)] : null;
+  const myTurn = own && room.current_turn_character_id === own.character_id && room.phase === 'active';
+  $('roleBadge').textContent = room.is_spectator ? 'SPETTATORE / SERVER' : `GIOCATORE · ${esc(own.name)}`;
+  $('actions').classList.toggle('hidden', room.is_spectator);
+  if (!own) return;
+  $('apLabel').textContent = `PA ${own.action_points}/${own.max_action_points}`;
+  const opponent = Object.values(room.combatants).find(c => c.character_id !== own.character_id);
+  const buttons = [];
+  buttons.push(`<button ${myTurn?'':'disabled'} data-action="attack" class="action physical"><strong>Attacco</strong><small>2 PA · stamina</small></button>`);
+  for (const ability of (own.abilities || [])) {
+    const name = ability.name || 'Abilità';
+    buttons.push(`<button ${myTurn?'':'disabled'} data-action="ability" data-ability="${esc(name)}" class="action magic"><strong>${esc(name)}</strong><small>1 PA · mana</small></button>`);
+  }
+  buttons.push(`<button ${myTurn?'':'disabled'} data-action="defend" class="action"><strong>Difesa</strong><small>1 PA</small></button>`);
+  buttons.push(`<button ${myTurn?'':'disabled'} data-action="recover" class="action"><strong>Recupera</strong><small>1 PA</small></button>`);
+  $('actionButtons').innerHTML = buttons.join('');
+  $('endTurn').disabled = !myTurn;
+  if (opponent) document.querySelectorAll('[data-action]').forEach(btn => btn.onclick = () => sendAction(btn.dataset.action, opponent.character_id, btn.dataset.ability));
+  $('endTurn').onclick = () => sendAction('end_turn');
+}
+
+function renderLog(room) {
+  $('combatLog').innerHTML = room.events.slice().reverse().map(e => `<div class="event ${esc(e.event_type)}"><span>R${esc(e.round_number)}</span><p>${esc(e.description)}</p></div>`).join('');
+  $('roundLabel').textContent = `ROUND ${room.round_number}`;
+  const active = room.current_turn_character_id ? room.combatants[String(room.current_turn_character_id)] : null;
+  $('turnBanner').textContent = room.phase !== 'active' ? (room.winner_id ? `VITTORIA: ${room.combatants[String(room.winner_id)]?.name || '—'}` : 'SCONTRO TERMINATO') : `TURNO DI ${active?.name || '—'}`;
+}
+
+async function refresh() {
+  if (!roomId || !token) return;
   try {
-    const response = await fetch('/api/battle', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ character_a_id: a, character_b_id: b, style: $('style').value })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Errore durante lo scontro.');
-    render(data);
-  } catch (error) {
-    $('loading').classList.add('hidden');
-    alert(error.message);
-  } finally { update(); }
+    const r = await fetch(`/api/pvp/${encodeURIComponent(roomId)}?token=${encodeURIComponent(token)}`);
+    const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Stanza non disponibile.');
+    state.room = data; $('setup').classList.add('hidden'); $('arena').classList.remove('hidden');
+    renderFighters(data); renderActions(data); renderLog(data);
+  } catch (e) { $('roomLabel').textContent = e.message; }
 }
 
-$('fighterA').addEventListener('change', update);
-$('fighterB').addEventListener('change', update);
-$('fightButton').addEventListener('click', fight);
-$('againButton').addEventListener('click', () => { $('result').classList.add('hidden'); window.scrollTo({top:0,behavior:'smooth'}); });
+async function sendAction(action, targetId, ability) {
+  if (state.busy || !state.room || state.room.is_spectator) return;
+  state.busy = true; $('actionMessage').textContent = 'Il server risolve l\'azione...';
+  const body = { token, action, target_id: targetId ?? undefined, ability: ability || undefined };
+  try {
+    const r = await fetch(`/api/pvp/${encodeURIComponent(roomId)}/action`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Azione rifiutata.');
+    state.room = data; renderFighters(data); renderActions(data); renderLog(data); $('actionMessage').textContent = '';
+  } catch (e) { $('actionMessage').textContent = e.message; }
+  finally { state.busy = false; }
+}
 
-loadCharacters().catch(error => alert(error.message));
+$('fighterA').addEventListener('change', updateSetup);
+$('fighterB').addEventListener('change', updateSetup);
+$('createRoom').addEventListener('click', () => createRoom().catch(e => alert(e.message)));
+
+(async () => {
+  if (roomId && token) { await refresh(); setInterval(refresh, 900); return; }
+  try { await loadCharacters(); } catch (e) { alert(e.message); }
+})();
