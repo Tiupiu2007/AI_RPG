@@ -8,11 +8,23 @@ ALLOWED_ACTIONS = {
     "create_memory",
     "relationship_change",
     "world_action",
+    "combat_action",
 }
 WORLD_ACTIONS = {"speak", "approach", "move"}
+COMBAT_ACTIONS = {"attack", "defend", "use_ability", "use_item", "flee", "wait"}
 RELATIONSHIP_FIELDS = ("trust", "affection", "respect", "hostility")
 MAX_ACTIONS_PER_TURN = 5
 MAX_MEMORY_ACTIONS_PER_TURN = 1
+MAX_COMBAT_ACTIONS_PER_TURN = 1
+MAX_ACTION_TEXT_LENGTH = 500
+
+# L'IA non può mai assegnare direttamente questi valori. Il combat engine
+# calcolerà danni, costi, condizioni, morte e vincitore.
+COMBAT_FORBIDDEN_FIELDS = {
+    "damage", "healing", "health", "hp", "max_health", "stamina",
+    "max_stamina", "mana", "max_mana", "status", "condition",
+    "conditions", "dead", "alive", "winner", "loser",
+}
 
 
 def _ids_from(value: Any) -> set[int]:
@@ -23,7 +35,10 @@ def _ids_from(value: Any) -> set[int]:
         if isinstance(item, int) and not isinstance(item, bool):
             result.add(item)
         elif isinstance(item, dict):
-            for key in ("id", "character_id", "character_a_id", "character_b_id"):
+            for key in (
+                "id", "character_id", "character_a_id", "character_b_id",
+                "actor_id", "target_id",
+            ):
                 candidate = item.get(key)
                 if isinstance(candidate, int) and not isinstance(candidate, bool):
                     result.add(candidate)
@@ -38,6 +53,19 @@ def _present_character_ids(context: dict[str, Any]) -> set[int]:
     scene = context.get("scene", {})
     if isinstance(scene, dict):
         ids |= _ids_from(scene.get("involved_characters", []))
+    return ids
+
+
+def _combatant_ids(context: dict[str, Any]) -> set[int]:
+    """ID autorizzati ad agire o essere bersagli nel combattimento."""
+    ids: set[int] = set()
+    combat = context.get("combat")
+    if isinstance(combat, dict):
+        for key in ("combatants", "participants", "fighters"):
+            ids |= _ids_from(combat.get(key, []))
+    for key in ("combatants", "participants", "fighters"):
+        ids |= _ids_from(context.get(key, []))
+    ids |= _present_character_ids(context)
     return ids
 
 
@@ -61,6 +89,16 @@ def _require_int(action: dict[str, Any], field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{field} deve essere un intero.")
     return value
+
+
+def _optional_text(action: dict[str, Any], field: str, maximum: int = MAX_ACTION_TEXT_LENGTH) -> None:
+    if field not in action:
+        return
+    value = action[field]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} deve essere una stringa non vuota.")
+    if len(value.strip()) > maximum:
+        raise ValueError(f"{field} è troppo lungo.")
 
 
 def _validate_character_reaction(action: dict[str, Any], character_id: int) -> None:
@@ -141,6 +179,50 @@ def _validate_world_action(action: dict[str, Any], character_id: int, context: d
             raise ValueError(f"location_id={location_id} non è una destinazione raggiungibile nella scena.")
 
 
+def _validate_combat_action(action: dict[str, Any], character_id: int, context: dict[str, Any]) -> None:
+    """Valida l'intenzione di combattimento, non il suo risultato."""
+    if _require_int(action, "character_id") != character_id:
+        raise ValueError("combat_action appartiene a un combattente diverso.")
+
+    combatants = _combatant_ids(context)
+    if character_id not in combatants:
+        raise ValueError("Il personaggio reagente non è presente nel combattimento.")
+
+    action_name = action.get("action")
+    if action_name not in COMBAT_ACTIONS:
+        raise ValueError(f"Azione di combattimento non consentita: {action_name!r}.")
+
+    for field in COMBAT_FORBIDDEN_FIELDS:
+        if field in action:
+            raise ValueError(
+                f"combat_action non può modificare direttamente '{field}'. "
+                "Il risultato deve essere calcolato dal combat engine."
+            )
+
+    if action_name in {"attack", "use_ability"}:
+        target_id = _require_int(action, "target_id")
+        if target_id == character_id:
+            raise ValueError("Un combattente non può bersagliare se stesso.")
+        if target_id not in combatants:
+            raise ValueError(f"target_id={target_id} non appartiene ai combattenti autorizzati.")
+
+    if action_name == "use_item":
+        _optional_text(action, "item", 200)
+        if not isinstance(action.get("item"), str) or not action["item"].strip():
+            raise ValueError("use_item richiede il nome dell'item.")
+
+    if action_name == "use_ability":
+        _optional_text(action, "ability", 200)
+        if not isinstance(action.get("ability"), str) or not action["ability"].strip():
+            raise ValueError("use_ability richiede il nome dell'abilità.")
+
+    if action_name == "flee" and "target_id" in action:
+        raise ValueError("flee non richiede target_id.")
+
+    _optional_text(action, "description", 500)
+    _optional_text(action, "reason", 500)
+
+
 def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(actions, list):
         raise ValueError("actions deve essere una lista.")
@@ -151,7 +233,7 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
     if len(actions) > MAX_ACTIONS_PER_TURN:
         raise ValueError(f"Sono consentite al massimo {MAX_ACTIONS_PER_TURN} azioni per turno.")
 
-    character = context.get("character")
+    character = context.get("character", {})
     if not isinstance(character, dict):
         raise ValueError("Il contesto non contiene il personaggio reagente.")
     character_id = character.get("id")
@@ -161,6 +243,7 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
     validated: list[dict[str, Any]] = []
     reaction_count = 0
     memory_count = 0
+    combat_count = 0
 
     for action in actions:
         if not isinstance(action, dict):
@@ -182,6 +265,11 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
             _validate_relationship(action, character_id, context)
         elif action_type == "world_action":
             _validate_world_action(action, character_id, context)
+        elif action_type == "combat_action":
+            combat_count += 1
+            if combat_count > MAX_COMBAT_ACTIONS_PER_TURN:
+                raise ValueError("È consentita al massimo una combat_action per turno.")
+            _validate_combat_action(action, character_id, context)
 
         validated.append(dict(action))
 
@@ -189,6 +277,7 @@ def validate_actions(actions: list[Any], context: dict[str, Any]) -> list[dict[s
         raise ValueError("Deve esistere esattamente una character_reaction valida.")
 
     # La reazione è il nucleo del turno e viene sempre eseguita per prima.
+    # combat_action rappresenta l'intenzione che il combat engine risolverà.
     reaction = next(action for action in validated if action["type"] == "character_reaction")
     others = [action for action in validated if action["type"] != "character_reaction"]
     return [reaction, *others]
