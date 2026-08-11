@@ -3,10 +3,10 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI RPG — Laboratorio Carte</title><link rel="stylesheet" href="cards.css"></head>
 <body>
 <main class="cards-app">
-<header class="topbar"><div><div class="eyebrow">AI RPG / COMBAT SYSTEM</div><h1>LABORATORIO CARTE</h1><p>Crea carte senza scrivere JSON: costi, immagini, requisiti ed effetti sono configurabili singolarmente.</p></div><a class="back" href="/battle.html">← Arena</a></header>
+<header class="topbar"><div><div class="eyebrow">AI RPG / COMBAT SYSTEM</div><h1>LABORATORIO CARTE</h1><p>AREA SERVER — crea e modifica le carte del gioco. I giocatori non hanno accesso a questo laboratorio.</p></div><a class="back" href="/battle.html">← Arena</a></header>
 <section class="workspace">
 <form id="cardForm" class="panel form-panel">
-<div class="panel-title"><span>EDITOR CARTA</span><button type="button" id="resetBtn">Nuova</button></div>
+<div class="panel-title"><span>EDITOR CARTA · SERVER</span><button type="button" id="resetBtn">Nuova</button></div>
 <label>ID tecnico<input id="id" required placeholder="fire_slash"></label>
 <label>Nome<input id="name" required placeholder="Fendente di Fuoco"></label>
 <div class="grid2"><label>Tipo<select id="type"><option value="attack">Attacco</option><option value="skill">Skill</option><option value="power">Power</option><option value="defence">Difesa</option><option value="magic">Magia</option></select></label><label>Rarità<select id="rarity"><option>common</option><option>uncommon</option><option>rare</option><option>legendary</option></select></label></div>
@@ -18,7 +18,7 @@
 <div class="requirements"><h3>REQUISITI PER IMPARARLA</h3><p>Ogni carta può avere requisiti completamente diversi.</p><div class="stat-grid" id="stats"></div><div class="grid2"><label>Livello minimo<input id="minLevel" type="number" min="1" value="1"></label><label>Razze consentite<input id="races" placeholder="elfo, mezzelfo"></label></div><label>Carte richieste<input id="requiresCards" placeholder="basic_spell, arcane_focus"></label><label>Tag richiesti<input id="requiredTags" placeholder="magic, fire"></label></div>
 <div class="effects-editor"><div class="section-head"><div><h3>EFFETTI</h3><p>Aggiungi tutti gli effetti che vuoi. Ogni effetto ha condizioni e parametri propri.</p></div><button type="button" id="addEffect">＋ Effetto</button></div><div id="effectsList"></div></div>
 <div class="advanced"><label>Tag della carta<input id="cardTags" placeholder="fire, attack, rare"></label></div>
-<button class="primary" type="submit">＋ CREA / AGGIORNA CARTA</button>
+<button class="primary" type="submit">＋ SALVA CARTA SUL SERVER</button>
 </form>
-<section class="panel preview-panel"><div class="panel-title"><span>ANTEPRIMA</span><div class="toolbar"><button type="button" id="copyBtn">Copia JSON</button><button type="button" id="downloadBtn">Scarica JSON</button></div></div><article id="cardPreview" class="card-preview"></article><pre id="jsonOutput"></pre><div class="catalog-title">CATALOGO</div><div id="catalog" class="catalog"></div><p class="hint">Il pulsante Scarica JSON crea un file pronto da inserire in <code>frontend/cards-data.json</code>. Il salvataggio definitivo nel catalogo verrà collegato al server in un passaggio successivo.</p></section>
+<section class="panel preview-panel"><div class="panel-title"><span>ANTEPRIMA</span><div class="toolbar"><button type="button" id="copyBtn">Copia JSON</button><button type="button" id="downloadBtn">Scarica JSON</button></div></div><article id="cardPreview" class="card-preview"></article><pre id="jsonOutput"></pre><div class="catalog-title">CATALOGO DEL SERVER</div><div id="catalog" class="catalog"></div><p class="hint">Le modifiche vengono salvate direttamente dal server in <code>frontend/cards-data.json</code>. Questa pagina e le API di creazione/modifica sono protette: i giocatori non possono usarle.</p></section>
 </section></main><script src="cards.js"></script></body></html>
