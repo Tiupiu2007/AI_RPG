@@ -93,11 +93,22 @@ def _room(room_id: str) -> PvPRoom:
     return room
 
 
+def get_editor_character_id(room_id: str, token: str | None) -> int | None:
+    """Restituisce il personaggio associato al token PvP.
+
+    Il token spettatore non dà accesso all'editor. Solo i due token giocatore
+    possono aprire la scheda del proprio personaggio.
+    """
+    room = _room(room_id)
+    if not token or token == room.spectator_token:
+        return None
+    return room.player_tokens.get(token)
+
+
 def _public_combatant(combatant: Any, own: bool, spectator: bool) -> dict[str, Any]:
     data = combatant.to_dict()
     if spectator or own:
         return data
-    # Il giocatore avversario vede solo ciò che è normalmente osservabile.
     return {
         "character_id": data["character_id"],
         "name": data["name"],
