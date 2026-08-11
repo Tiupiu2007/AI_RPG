@@ -42,13 +42,20 @@ def normalize_card(card: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(statistics, dict):
         statistics = {}
 
+    resource = str(card.get("resource", "action_points")).strip() or "action_points"
+    cost = max(0, _int(card.get("cost", 1), 1))
+    mana_cost = max(0, _int(card.get("mana_cost", cost if resource == "mana" else 0), 0))
+    action_points_cost = max(0, _int(card.get("action_points_cost", 1 if resource == "mana" else cost), 1))
+
     return {
         "id": card_id,
         "name": name,
         "type": str(card.get("type", "skill")).strip() or "skill",
         "rarity": str(card.get("rarity", "common")).strip() or "common",
-        "cost": max(0, _int(card.get("cost", 1), 1)),
-        "resource": str(card.get("resource", "action_points")).strip() or "action_points",
+        "cost": cost,
+        "resource": resource,
+        "mana_cost": mana_cost,
+        "action_points_cost": action_points_cost,
         "description": str(card.get("description", "")).strip(),
         "flavor": str(card.get("flavor", "")).strip(),
         "image": str(card.get("image", "")).strip(),
@@ -57,7 +64,7 @@ def normalize_card(card: dict[str, Any]) -> dict[str, Any]:
             "races": _string_list(requirements.get("races", [])),
             "tags": _string_list(requirements.get("tags", [])),
             "requires_cards": _string_list(requirements.get("requires_cards", [])),
-            "min_level": max(0, _int(requirements.get("min_level", 1), 1)),
+            "min_level": max(1, _int(requirements.get("min_level", 1), 1)),
         },
         "effects": card.get("effects", []) if isinstance(card.get("effects", []), list) else [],
         "tags": _string_list(card.get("tags", [])),
@@ -95,10 +102,20 @@ def can_learn_card(card: dict[str, Any], character: dict[str, Any]) -> tuple[boo
     if level < requirements["min_level"]:
         reasons.append(f"livello >= {requirements['min_level']}")
 
-    known = extra.get("cards", [])
+    character_tags = {str(x).strip().lower() for x in _string_list(extra.get("tags", []))}
+    for required_tag in requirements["tags"]:
+        if required_tag.lower() not in character_tags:
+            reasons.append(f"tag richiesto: {required_tag}")
+
+    known = extra.get("cards", extra.get("deck", []))
     if not isinstance(known, list):
         known = []
-    known_ids = {str(item.get("id" if isinstance(item, dict) else "", item) if isinstance(item, (dict, str)) else "") for item in known}
+    known_ids = set()
+    for item in known:
+        if isinstance(item, dict) and item.get("id"):
+            known_ids.add(str(item["id"]))
+        elif isinstance(item, str):
+            known_ids.add(item.strip())
     for required in requirements["requires_cards"]:
         if required not in known_ids:
             reasons.append(f"richiede la carta: {required}")
