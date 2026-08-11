@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 
 CARDS_FILE = Path(__file__).resolve().parents[2] / "frontend" / "cards-data.json"
+_LOCK = RLock()
 
 
 class CardError(ValueError):
     pass
 
 
-def load_cards() -> list[dict[str, Any]]:
+def _read_raw_cards() -> list[dict[str, Any]]:
     if not CARDS_FILE.exists():
         return []
     try:
@@ -21,12 +23,55 @@ def load_cards() -> list[dict[str, Any]]:
         raise CardError(f"Catalogo carte non valido: {exc}") from exc
     if not isinstance(data, list):
         raise CardError("Il catalogo delle carte deve essere una lista JSON.")
-    return [normalize_card(card) for card in data if isinstance(card, dict)]
+    return [card for card in data if isinstance(card, dict)]
+
+
+def _write_raw_cards(cards: list[dict[str, Any]]) -> None:
+    CARDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CARDS_FILE.write_text(
+        json.dumps(cards, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def load_cards() -> list[dict[str, Any]]:
+    with _LOCK:
+        return [normalize_card(card) for card in _read_raw_cards()]
 
 
 def get_card(card_id: str) -> dict[str, Any] | None:
     card_id = str(card_id).strip()
     return next((card for card in load_cards() if card["id"] == card_id), None)
+
+
+def upsert_card(card: dict[str, Any]) -> dict[str, Any]:
+    """Create or replace a card. This function is intentionally server-side only."""
+    normalized = normalize_card(card)
+    with _LOCK:
+        cards = _read_raw_cards()
+        replaced = False
+        for index, existing in enumerate(cards):
+            if str(existing.get("id", "")).strip() == normalized["id"]:
+                cards[index] = normalized
+                replaced = True
+                break
+        if not replaced:
+            cards.append(normalized)
+        _write_raw_cards(cards)
+    return normalized
+
+
+def delete_card(card_id: str) -> bool:
+    card_id = str(card_id).strip()
+    if not card_id:
+        raise CardError("ID carta mancante.")
+    with _LOCK:
+        cards = _read_raw_cards()
+        filtered = [card for card in cards if str(card.get("id", "")).strip() != card_id]
+        if len(filtered) == len(cards):
+            return False
+        _write_raw_cards(filtered)
+    return True
 
 
 def normalize_card(card: dict[str, Any]) -> dict[str, Any]:
@@ -56,9 +101,11 @@ def normalize_card(card: dict[str, Any]) -> dict[str, Any]:
         "resource": resource,
         "mana_cost": mana_cost,
         "action_points_cost": action_points_cost,
+        "target": str(card.get("target", "enemy")).strip() or "enemy",
         "description": str(card.get("description", "")).strip(),
         "flavor": str(card.get("flavor", "")).strip(),
         "image": str(card.get("image", "")).strip(),
+        "exhaust": bool(card.get("exhaust", False)),
         "requirements": {
             "statistics": {str(key): _int(value, 0) for key, value in statistics.items()},
             "races": _string_list(requirements.get("races", [])),
