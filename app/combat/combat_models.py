@@ -12,6 +12,9 @@ from typing import Any
 # La simulazione vera e propria appartiene a combat_engine.py.
 
 
+DEFAULT_ACTION_POINTS = 3
+
+
 @dataclass
 class CombatantState:
     """Stato runtime di un combattente durante uno scontro."""
@@ -24,6 +27,8 @@ class CombatantState:
     max_stamina: int
     mana: int
     max_mana: int
+    action_points: int = DEFAULT_ACTION_POINTS
+    max_action_points: int = DEFAULT_ACTION_POINTS
     statistics: dict[str, int] = field(default_factory=dict)
     abilities: list[dict[str, Any]] = field(default_factory=list)
     skills: list[dict[str, Any]] = field(default_factory=list)
@@ -36,10 +41,17 @@ class CombatantState:
         self.max_health = max(1, int(self.max_health))
         self.max_stamina = max(0, int(self.max_stamina))
         self.max_mana = max(0, int(self.max_mana))
+        self.max_action_points = max(1, int(self.max_action_points))
         self.health = max(0, min(int(self.health), self.max_health))
         self.stamina = max(0, min(int(self.stamina), self.max_stamina))
         self.mana = max(0, min(int(self.mana), self.max_mana))
+        self.action_points = max(0, min(int(self.action_points), self.max_action_points))
         self.alive = self.health > 0 and not self.defeated
+
+    def reset_turn_resources(self) -> None:
+        """Ripristina i PA all'inizio del turno del combattente."""
+        self.action_points = self.max_action_points
+        self.clamp_resources()
 
     def to_dict(self) -> dict[str, Any]:
         self.clamp_resources()
@@ -50,8 +62,9 @@ class CombatantState:
 class CombatAction:
     """Intenzione di un combattente.
 
-    È importante che questa struttura descriva l'intenzione e non il risultato.
-    L'AI può proporre "attacco", ma non può decidere direttamente il danno.
+    Questa struttura descrive l'intenzione e non il risultato.
+    L'AI o il client possono proporre un'azione, ma il motore decide
+    costi, successo, danno e conseguenze.
     """
 
     character_id: int
@@ -110,13 +123,14 @@ class CombatEvent:
 
 @dataclass
 class CombatState:
-    """Stato completo e serializzabile di uno scontro."""
+    """Stato completo e serializzabile di uno scontro 1v1."""
 
     combat_id: str
     round_number: int = 1
     phase: str = "active"
     combatants: dict[int, CombatantState] = field(default_factory=dict)
     turn_order: list[int] = field(default_factory=list)
+    current_turn_character_id: int | None = None
     events: list[CombatEvent] = field(default_factory=list)
     winner_id: int | None = None
     loser_ids: list[int] = field(default_factory=list)
@@ -129,7 +143,11 @@ class CombatState:
         return combatant
 
     def living_combatants(self) -> list[CombatantState]:
-        return [combatant for combatant in self.combatants.values() if combatant.alive and not combatant.defeated]
+        return [
+            combatant
+            for combatant in self.combatants.values()
+            if combatant.alive and not combatant.defeated
+        ]
 
     def add_event(
         self,
@@ -139,6 +157,9 @@ class CombatState:
         target_id: int | None = None,
         **data: Any,
     ) -> CombatEvent:
+        # "description" è un parametro riservato: non deve essere passato
+        # anche dentro **data, altrimenti Python solleva TypeError.
+        data.pop("description", None)
         event = CombatEvent(
             round_number=self.round_number,
             actor_id=actor_id,
@@ -156,6 +177,7 @@ class CombatState:
             return False
 
         self.phase = "finished"
+        self.current_turn_character_id = None
         if len(living) == 1:
             self.winner_id = living[0].character_id
             self.loser_ids = [
@@ -178,6 +200,7 @@ class CombatState:
                 for character_id, combatant in self.combatants.items()
             },
             "turn_order": list(self.turn_order),
+            "current_turn_character_id": self.current_turn_character_id,
             "events": [event.to_dict() for event in self.events],
             "winner_id": self.winner_id,
             "loser_ids": list(self.loser_ids),
@@ -242,6 +265,18 @@ def combatant_from_character(character: dict[str, Any]) -> CombatantState:
     max_stamina = _nonnegative_int(conditions.get("stamina"), 100)
     max_mana = _nonnegative_int(conditions.get("mana"), 0)
 
+    # Il sistema PvP usa PA separati dalla stamina: la stamina può restare
+    # disponibile per meccaniche future, mentre i PA governano il turno.
+    max_action_points = _positive_int(
+        conditions.get("max_action_points", conditions.get("action_points")),
+        DEFAULT_ACTION_POINTS,
+    )
+    action_points = _nonnegative_int(
+        conditions.get("action_points"),
+        max_action_points,
+    )
+    action_points = min(action_points, max_action_points)
+
     abilities = extra.get("abilities", [])
     skills = extra.get("skills", [])
     if not isinstance(abilities, list):
@@ -262,6 +297,8 @@ def combatant_from_character(character: dict[str, Any]) -> CombatantState:
         max_stamina=max_stamina,
         mana=max_mana,
         max_mana=max_mana,
+        action_points=action_points,
+        max_action_points=max_action_points,
         statistics=statistics,
         abilities=[item for item in abilities if isinstance(item, dict)],
         skills=[item for item in skills if isinstance(item, dict)],
