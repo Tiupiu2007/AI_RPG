@@ -1,92 +1,24 @@
-const state = { characters: [] };
-
 const $ = id => document.getElementById(id);
-
-function fullName(c) {
-  const i = c.identity || c;
-  return [i.name, i.surname].filter(Boolean).join(" ") || `Personaggio #${c.id}`;
-}
-
-async function loadCharacters() {
-  const response = await fetch('/api/characters');
-  if (!response.ok) throw new Error('Impossibile caricare i personaggi.');
-  state.characters = await response.json();
-  for (const select of [$('fighterA'), $('fighterB')]) {
-    for (const c of state.characters) {
-      const option = document.createElement('option');
-      option.value = c.id;
-      option.textContent = fullName(c);
-      select.appendChild(option);
-    }
-  }
-  update();
-}
-
-function get(id) {
-  return state.characters.find(c => Number(c.id) === Number(id));
-}
-
-function updatePreview(side) {
-  const id = $(side === 'A' ? 'fighterA' : 'fighterB').value;
-  const c = get(id);
-  const target = $('preview' + side);
-  if (!c) { target.textContent = 'Nessun combattente selezionato.'; return; }
-  const i = c.identity || c;
-  target.innerHTML = `<strong>${fullName(c)}</strong><span>${i.race || 'Razza sconosciuta'} · ${i.age || '?'} anni</span>`;
-}
-
-function update() {
-  updatePreview('A'); updatePreview('B');
-  const a = $('fighterA').value, b = $('fighterB').value;
-  $('fightButton').disabled = !a || !b || a === b;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-}
-
-function render(result) {
-  $('title').textContent = result.title || 'Scontro';
-  $('introduction').textContent = result.introduction || '';
-  $('winner').textContent = result.winner || 'Pareggio';
-  $('ending').textContent = result.ending || '';
-  $('aftermath').textContent = result.aftermath || '';
-  $('rounds').innerHTML = (result.rounds || []).map((r, index) => `
-    <article class="round card">
-      <div class="round-number">ROUND ${escapeHtml(r.round ?? index + 1)}</div>
-      <h3>${escapeHtml(r.title || `Svolta ${index + 1}`)}</h3>
-      <p>${escapeHtml(r.narration || '')}</p>
-      ${Array.isArray(r.events) ? `<ul>${r.events.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
-      <div class="status"><span>${escapeHtml(r.status?.fighter_a || '')}</span><span>${escapeHtml(r.status?.fighter_b || '')}</span></div>
-    </article>`).join('');
-  $('loading').classList.add('hidden');
-  $('result').classList.remove('hidden');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-async function fight() {
-  const a = Number($('fighterA').value), b = Number($('fighterB').value);
-  if (!a || !b || a === b) return;
-  $('fightButton').disabled = true;
-  $('loading').classList.remove('hidden');
-  $('result').classList.add('hidden');
-  try {
-    const response = await fetch('/api/battle', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ character_a_id: a, character_b_id: b, style: $('style').value })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Errore durante lo scontro.');
-    render(data);
-  } catch (error) {
-    $('loading').classList.add('hidden');
-    alert(error.message);
-  } finally { update(); }
-}
-
-$('fighterA').addEventListener('change', update);
-$('fighterB').addEventListener('change', update);
-$('fightButton').addEventListener('click', fight);
-$('againButton').addEventListener('click', () => { $('result').classList.add('hidden'); window.scrollTo({top:0,behavior:'smooth'}); });
-
-loadCharacters().catch(error => alert(error.message));
+const params = new URLSearchParams(location.search);
+let roomId = params.get('room');
+let token = params.get('token');
+const state = { characters: [], room: null, busy: false, shareLinks: null, polling: false };
+function fullName(c) { const i=c.identity||c; return [i.name,i.surname].filter(Boolean).join(' ')||`Personaggio #${c.id}`; }
+function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]));}
+function bar(value,max){const pct=max?Math.max(0,Math.min(100,value/max*100)):0;return `<div class="bar"><i style="width:${pct}%"></i></div>`;}
+function updateBackButton(room){const b=$('backButton');if(!b)return;if(room?.is_spectator){b.textContent='← Arena';b.href='/battle.html';return;}const id=Number(room?.you_are);if(Number.isInteger(id)&&roomId&&token){b.textContent='📋 Scheda personaggio';b.href=`/index.html?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`;return;}b.textContent='← Editor personaggi';b.href='/';}
+async function loadCharacters(){const r=await fetch('/api/characters');if(!r.ok)throw new Error('Impossibile caricare i personaggi.');state.characters=await r.json();for(const s of [$('fighterA'),$('fighterB')])for(const c of state.characters){const o=document.createElement('option');o.value=c.id;o.textContent=fullName(c);s.appendChild(o);}updateSetup();}
+function findCharacter(id){return state.characters.find(c=>Number(c.id)===Number(id));}
+function updatePreview(side){const c=findCharacter($(side==='A'?'fighterA':'fighterB').value),t=$('preview'+side);if(!c){t.textContent='Nessun combattente selezionato.';return;}const i=c.identity||c;t.innerHTML=`<strong>${esc(fullName(c))}</strong><span>${esc(i.race||'Razza')} · ${esc(i.age||'?')} anni</span>`;}
+function updateSetup(){updatePreview('A');updatePreview('B');const a=$('fighterA').value,b=$('fighterB').value;$('createRoom').disabled=!a||!b||a===b;}
+function renderShareLinks(data){state.shareLinks=data;const l=$('links');l.classList.remove('hidden');l.innerHTML=`<strong>STANZA ${esc(data.room_id)} — LINK DI ACCESSO</strong><label>🎮 ${esc(data.player_a_name||'Giocatore A')} · COMBATTIMENTO<input readonly value="${esc(data.player_a_url)}" onclick="this.select()"></label><label>📋 ${esc(data.player_a_name||'Giocatore A')} · SCHEDA SOLA LETTURA<input readonly value="${esc(data.player_a_character_url||'')}" onclick="this.select()"></label><label>🎮 ${esc(data.player_b_name||'Giocatore B')} · COMBATTIMENTO<input readonly value="${esc(data.player_b_url)}" onclick="this.select()"></label><label>📋 ${esc(data.player_b_name||'Giocatore B')} · SCHEDA SOLA LETTURA<input readonly value="${esc(data.player_b_character_url||'')}" onclick="this.select()"></label><label>👁 Spettatore / Server · PUBBLICO<input readonly value="${esc(data.spectator_url)}" onclick="this.select()"></label><small>I giocatori vedono solo il proprio mazzo e la propria mano. Il server vede tutto.</small>`;}
+async function createRoom(){const aId=Number($('fighterA').value),bId=Number($('fighterB').value);const r=await fetch('/api/pvp/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({character_a_id:aId,character_b_id:bId})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Errore creazione stanza.');data.player_a_name=fullName(findCharacter(aId));data.player_b_name=fullName(findCharacter(bId));renderShareLinks(data);roomId=data.room_id;token=data.spectator_token;history.replaceState({},'',`/battle.html?room=${data.room_id}&token=${data.spectator_token}`);await refresh();if(!state.polling){state.polling=true;setInterval(refresh,900);}}
+function renderFighters(room){const ids=room.turn_order.length?room.turn_order:Object.keys(room.combatants).map(Number);$('fighters').innerHTML=ids.map(id=>{const c=room.combatants[String(id)],active=room.current_turn_character_id===c.character_id;return `<article class="fighter-card ${active?'active':''} ${c.defeated?'defeated':''}"><div class="fighter-head"><div><span class="fighter-name">${esc(c.name)}</span><span class="fighter-status">${esc(c.status)}</span></div><b>${active?'TURNO':''}</b></div><div class="resource"><span>HP ${c.health}/${c.max_health}</span>${bar(c.health,c.max_health)}</div><div class="resource"><span>STAMINA ${c.stamina}/${c.max_stamina}</span>${bar(c.stamina,c.max_stamina)}</div><div class="resource"><span>MANA ${c.mana}/${c.max_mana}</span>${bar(c.mana,c.max_mana)}</div><div class="conditions">${(c.conditions||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div></article>`;}).join('');}
+function renderCard(card,myTurn,ownId,opponentId){const resource=card.resource==='mana'?`${card.mana_cost||card.cost} MANA · ${card.action_points_cost||1} PA`:`${card.action_points_cost||card.cost} PA`;const image=card.image?`<img src="${esc(card.image)}" onerror="this.style.display='none'">`:'';const target=card.target==='self'?ownId:opponentId;const targetLabel=card.target==='self'?'SELF':'TARGET';return `<button ${myTurn?'':'disabled'} class="battle-card rarity-${esc(card.rarity||'common')}" data-card="${esc(card.id)}" data-target="${target}"><div class="card-art">${image}</div><div class="card-top"><span>${esc(card.type)} · ${targetLabel}</span><b>${esc(resource)}</b></div><strong>${esc(card.name)}</strong><p>${esc(card.description)}</p><small>${esc(card.flavor||'')}</small></button>`;}
+function renderActions(room){const ownId=room.you_are,own=ownId&&ownId!=='spectator'?room.combatants[String(ownId)]:null,myTurn=own&&room.current_turn_character_id===own.character_id&&room.phase==='active';$('roleBadge').textContent=room.is_spectator?'SPETTATORE / SERVER':`GIOCATORE · ${esc(own.name)}`;$('actions').classList.toggle('hidden',room.is_spectator);updateBackButton(room);if(!own)return;$('apLabel').textContent=`PA ${own.action_points}/${own.max_action_points} · MANA ${own.mana}/${own.max_mana}`;const opponent=Object.values(room.combatants).find(c=>c.character_id!==own.character_id);const hand=own.cards?.hand||[];$('actionButtons').innerHTML=hand.map(card=>renderCard(card,myTurn,own.character_id,opponent?.character_id)).join('')||`<div class="empty-hand">Nessuna carta in mano.</div>`;document.querySelectorAll('[data-card]').forEach(btn=>btn.onclick=()=>sendCard(btn.dataset.card,Number(btn.dataset.target)));$('endTurn').disabled=!myTurn;$('endTurn').onclick=()=>sendAction('end_turn');}
+function renderLog(room){$('combatLog').innerHTML=room.events.slice().reverse().map(e=>`<div class="event ${esc(e.event_type)}"><span>R${esc(e.round_number)}</span><p>${esc(e.description)}</p></div>`).join('');$('roundLabel').textContent=`ROUND ${room.round_number}`;const active=room.current_turn_character_id?room.combatants[String(room.current_turn_character_id)]:null;$('turnBanner').textContent=room.phase!=='active'?(room.winner_id?`VITTORIA: ${room.combatants[String(room.winner_id)]?.name||'—'}`:'SCONTRO TERMINATO'):`TURNO DI ${active?.name||'—'}`;}
+async function refresh(){if(!roomId||!token)return;try{const r=await fetch(`/api/pvp/${encodeURIComponent(roomId)}?token=${encodeURIComponent(token)}`),data=await r.json();if(!r.ok)throw new Error(data.error||'Stanza non disponibile.');state.room=data;$('arena').classList.remove('hidden');renderFighters(data);renderActions(data);renderLog(data);if(!state.shareLinks)$('setup').classList.add('hidden');}catch(e){$('roomLabel').textContent=e.message;}}
+async function sendCard(cardId,targetId){if(state.busy||!state.room||state.room.is_spectator)return;state.busy=true;$('actionMessage').textContent='Il server risolve la carta...';try{const r=await fetch(`/api/pvp/${encodeURIComponent(roomId)}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,action:'card',card_id:cardId,target_id:targetId})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Carta rifiutata.');state.room=data;renderFighters(data);renderActions(data);renderLog(data);$('actionMessage').textContent='';}catch(e){$('actionMessage').textContent=e.message;}finally{state.busy=false;}}
+async function sendAction(action){if(state.busy||!state.room||state.room.is_spectator)return;state.busy=true;$('actionMessage').textContent='Il server risolve l\'azione...';try{const r=await fetch(`/api/pvp/${encodeURIComponent(roomId)}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,action})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Azione rifiutata.');state.room=data;renderFighters(data);renderActions(data);renderLog(data);$('actionMessage').textContent='';}catch(e){$('actionMessage').textContent=e.message;}finally{state.busy=false;}}
+$('fighterA').addEventListener('change',updateSetup);$('fighterB').addEventListener('change',updateSetup);$('createRoom').addEventListener('click',()=>createRoom().catch(e=>alert(e.message)));
+(async()=>{if(roomId&&token){await refresh();if(!state.polling){state.polling=true;setInterval(refresh,900);}return;}try{await loadCharacters();}catch(e){alert(e.message);}})();

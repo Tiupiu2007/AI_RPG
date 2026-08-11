@@ -70,6 +70,21 @@ textarea { min-height:135px; line-height:1.55; }
 .progress-container { height:5px; margin-top:28px; background:#292e35; }
 .progress-bar { background:#e1e3e6; }
 
+/* PvP player sheets are strictly view-only in the browser. */
+body.pvp-player-sheet #content input,
+body.pvp-player-sheet #content textarea,
+body.pvp-player-sheet #content select,
+body.pvp-player-sheet #content button,
+body.pvp-player-sheet #content [contenteditable="true"] {
+    pointer-events:none !important;
+    user-select:text;
+}
+body.pvp-player-sheet #generationOverlay { pointer-events:none !important; }
+body.pvp-player-sheet .player-sheet-badge { display:inline-flex; align-items:center; min-height:38px; padding:9px 14px; border:1px solid #303640; border-radius:var(--ui-radius-small); color:#9fa7b2; font-size:12px; font-weight:650; }
+body.pvp-player-sheet .character-search,
+body.pvp-player-sheet .character-list,
+body.pvp-player-sheet .character-list-title { display:none !important; }
+
 * { scrollbar-width:thin; scrollbar-color:#363c45 transparent; }
 *::-webkit-scrollbar { width:7px; height:7px; }
 *::-webkit-scrollbar-track { background:transparent; }

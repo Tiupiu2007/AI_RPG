@@ -3,41 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI RPG - Scontro</title>
+<title>AI RPG — PvP 1v1</title>
 <link rel="stylesheet" href="battle.css">
 </head>
 <body>
 <main class="battle-app">
 <header class="topbar">
-  <div><div class="eyebrow">AI RPG / SIMULAZIONE</div><h1>ARENA</h1><p>Seleziona due personaggi. L'IA dirige l'intero scontro.</p></div>
-  <a class="back" href="/">← Editor personaggi</a>
+  <div><div class="eyebrow">AI RPG / ARENA</div><h1>PvP 1v1</h1><p id="roomLabel">Il server osserva. I combattenti giocano a turni.</p></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a class="back" href="/cards.html">🃏 Laboratorio carte</a>
+    <a id="backButton" class="back" href="/">← Editor personaggi</a>
+  </div>
 </header>
-<section class="setup card">
-  <div class="fighter">
-    <label for="fighterA">COMBATTENTE A</label>
-    <select id="fighterA"><option value="">Seleziona personaggio</option></select>
-    <div id="previewA" class="preview">Nessun combattente selezionato.</div>
-  </div>
+
+<section id="setup" class="card setup">
+  <div class="fighter"><label for="fighterA">COMBATTENTE A</label><select id="fighterA"><option value="">Seleziona personaggio</option></select><div id="previewA" class="preview">Nessun combattente selezionato.</div></div>
   <div class="versus">VS</div>
-  <div class="fighter">
-    <label for="fighterB">COMBATTENTE B</label>
-    <select id="fighterB"><option value="">Seleziona personaggio</option></select>
-    <div id="previewB" class="preview">Nessun combattente selezionato.</div>
-  </div>
-  <div class="options">
-    <label for="style">STILE</label>
-    <select id="style"><option value="cinematico">Cinematico</option><option value="brutale">Brutale</option><option value="tattico">Tattico</option><option value="epico">Epico</option></select>
-  </div>
-  <button id="fightButton" class="fight" disabled>⚔ GENERA LO SCONTRO</button>
+  <div class="fighter"><label for="fighterB">COMBATTENTE B</label><select id="fighterB"><option value="">Seleziona personaggio</option></select><div id="previewB" class="preview">Nessun combattente selezionato.</div></div>
+  <button id="createRoom" class="fight" disabled>⚔ CREA STANZA PvP</button>
+  <div id="links" class="links hidden"></div>
 </section>
-<section id="loading" class="loading hidden"><div class="spinner">✦</div><strong>L'IA sta dirigendo lo scontro...</strong><span>Analisi delle capacità, tattiche e conseguenze.</span></section>
-<section id="result" class="result hidden">
-  <div class="result-head card"><div class="eyebrow">SCONTRO COMPLETATO</div><h2 id="title"></h2><p id="introduction"></p></div>
-  <div id="rounds"></div>
-  <div class="winner card"><span>VINCITORE</span><strong id="winner"></strong><p id="ending"></p><small id="aftermath"></small></div>
-  <button id="againButton" class="again">Nuovo scontro</button>
+
+<section id="arena" class="hidden">
+  <div id="roleBadge" class="role-badge">SERVER</div>
+  <div id="turnBanner" class="turn-banner">Caricamento...</div>
+  <div id="fighters" class="fighters"></div>
+  <section id="actions" class="card actions">
+    <div class="actions-head"><span>AZIONI</span><strong id="apLabel">PA —</strong></div>
+    <div id="actionButtons" class="action-buttons"></div>
+    <button id="endTurn" class="end-turn">FINE TURNO</button>
+    <div id="actionMessage" class="action-message"></div>
+  </section>
+  <section class="card log-panel"><div class="log-head"><span>CRONACA DELLO SCONTRO</span><span id="roundLabel">ROUND 1</span></div><div id="combatLog" class="combat-log"></div></section>
 </section>
 </main>
-<script type="module" src="battle.js"></script>
+<script src="battle.js"></script>
 </body>
 </html>
