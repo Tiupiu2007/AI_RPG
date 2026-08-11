@@ -15,7 +15,12 @@ def _extra(character: dict[str, Any]) -> dict[str, Any]:
 
 
 def _save(character: dict[str, Any], extra: dict[str, Any]) -> None:
-    save_character(character["identity"], character.get("languages", []), extra_data=extra, character_id=int(character["id"]))
+    save_character(
+        character["identity"],
+        character.get("languages", []),
+        extra_data=extra,
+        character_id=int(character["id"]),
+    )
 
 
 def _require_character(character_id: int) -> dict[str, Any]:
@@ -53,7 +58,44 @@ def execute_character_reaction(character_id: int, action: dict[str, Any]) -> dic
     return state
 
 
-def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[str, Any]:
+def execute_combat_action(
+    character_id: int,
+    action: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Invia una combat_action al combat engine senza permettere all'AI di applicare direttamente gli effetti."""
+    if not isinstance(action, dict) or action.get("type") != "combat_action":
+        raise ValueError("Azione non valida per execute_combat_action.")
+    if action.get("character_id") != character_id:
+        raise ValueError("La combat_action appartiene a un altro personaggio.")
+
+    # Import locale: il game engine di combattimento è il livello che decide
+    # danni, costi, condizioni, morte e altri effetti reali.
+    try:
+        from app.combat.combat_engine import resolve_combat_action
+    except ImportError as error:
+        raise ValueError(
+            "Il combat engine non è ancora disponibile. "
+            "Creare app/combat/combat_engine.py prima di eseguire una combat_action."
+        ) from error
+
+    result = resolve_combat_action(
+        character_id=character_id,
+        action=dict(action),
+        context=context if isinstance(context, dict) else {},
+    )
+
+    if not isinstance(result, dict):
+        raise ValueError("Il combat engine deve restituire un dizionario.")
+
+    return result
+
+
+def execute_actions(
+    character_id: int,
+    actions: list[dict[str, Any]],
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Esegue esclusivamente azioni già validate dal game engine."""
     character = _require_character(character_id)
     if not isinstance(actions, list):
@@ -65,6 +107,7 @@ def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[st
 
     executed: list[dict[str, Any]] = []
     created_memory_ids: list[int] = []
+    combat_results: list[dict[str, Any]] = []
     reaction_executed = False
     memory_executed = False
 
@@ -106,7 +149,15 @@ def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[st
             continue
 
         elif action_type == "world_action":
+            # Le azioni del mondo vengono gestite dal relativo livello quando
+            # sarà implementata la simulazione persistente del mondo.
             pass
+
+        elif action_type == "combat_action":
+            combat_result = execute_combat_action(character_id, action, context=context)
+            combat_results.append(combat_result)
+            executed.append({**action, "result": combat_result})
+            continue
 
         else:
             raise ValueError(f"Tipo di azione non supportato dall'executor: {action_type!r}.")
@@ -117,4 +168,9 @@ def execute_actions(character_id: int, actions: list[dict[str, Any]]) -> dict[st
         raise ValueError("Ogni turno deve eseguire una character_reaction.")
 
     character = get_character(character_id) or character
-    return {"executed_actions": executed, "created_memory_ids": created_memory_ids, "extra": _extra(character)}
+    return {
+        "executed_actions": executed,
+        "created_memory_ids": created_memory_ids,
+        "combat_results": combat_results,
+        "extra": _extra(character),
+    }
