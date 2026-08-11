@@ -1,14 +1,14 @@
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const roomId = params.get('room');
-const token = params.get('token');
-const state = { characters: [], room: null, busy: false };
+let roomId = params.get('room');
+let token = params.get('token');
+const state = { characters: [], room: null, busy: false, shareLinks: null };
 
 function fullName(c) {
   const i = c.identity || c;
   return [i.name, i.surname].filter(Boolean).join(' ') || `Personaggio #${c.id}`;
 }
-function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+function esc(v) { return String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c])); }
 function bar(value, max) { const pct = max ? Math.max(0, Math.min(100, value / max * 100)) : 0; return `<div class="bar"><i style="width:${pct}%"></i></div>`; }
 
 async function loadCharacters() {
@@ -34,14 +34,38 @@ function updateSetup() {
   $('createRoom').disabled = !a || !b || a === b;
 }
 
+function renderShareLinks(data) {
+  state.shareLinks = data;
+  const links = $('links');
+  links.classList.remove('hidden');
+  links.innerHTML = `
+    <strong>STANZA ${esc(data.room_id)} — LINK DI ACCESSO</strong>
+    <label>🎮 ${esc(data.player_a_name || 'Giocatore A')}<input readonly value="${esc(data.player_a_url)}" onclick="this.select()"></label>
+    <label>🎮 ${esc(data.player_b_name || 'Giocatore B')}<input readonly value="${esc(data.player_b_url)}" onclick="this.select()"></label>
+    <label>👁 ${esc(data.spectator_name || 'Spettatore / Server')}<input readonly value="${esc(data.spectator_url)}" onclick="this.select()"></label>
+    <small>Seleziona e copia il link del relativo personaggio. Il link spettatore è quello da conservare tu.</small>`;
+
+  const arenaLinks = $('arenaLinks');
+  if (arenaLinks) {
+    arenaLinks.classList.remove('hidden');
+    arenaLinks.innerHTML = links.innerHTML;
+  }
+}
+
 async function createRoom() {
   const body = { character_a_id: Number($('fighterA').value), character_b_id: Number($('fighterB').value) };
   const r = await fetch('/api/pvp/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Errore creazione stanza.');
-  $('links').classList.remove('hidden');
-  $('links').innerHTML = `<strong>STANZA ${esc(data.room_id)}</strong><label>Giocatore A<input readonly value="${esc(data.player_a_url)}"></label><label>Giocatore B<input readonly value="${esc(data.player_b_url)}"></label><label>Spettatore / Server<input readonly value="${esc(data.spectator_url)}"></label><small>Invia i due link giocatore agli amici. Conserva il link spettatore.</small>`;
+
+  renderShareLinks(data);
+
+  // Il server passa automaticamente alla vista spettatore, ma i link restano visibili.
+  roomId = data.room_id;
+  token = data.spectator_token;
   history.replaceState({}, '', `/battle.html?room=${data.room_id}&token=${data.spectator_token}`);
-  location.reload();
+  $('setup').classList.add('created');
+  await refresh();
+  if (!state.polling) { state.polling = true; setInterval(refresh, 900); }
 }
 
 function renderFighters(room) {
@@ -94,8 +118,11 @@ async function refresh() {
   try {
     const r = await fetch(`/api/pvp/${encodeURIComponent(roomId)}?token=${encodeURIComponent(token)}`);
     const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Stanza non disponibile.');
-    state.room = data; $('setup').classList.add('hidden'); $('arena').classList.remove('hidden');
+    state.room = data;
+    $('arena').classList.remove('hidden');
     renderFighters(data); renderActions(data); renderLog(data);
+    // Se la stanza è stata creata da questa pagina, manteniamo i link visibili.
+    if (!state.shareLinks) $('setup').classList.add('hidden');
   } catch (e) { $('roomLabel').textContent = e.message; }
 }
 
@@ -116,6 +143,6 @@ $('fighterB').addEventListener('change', updateSetup);
 $('createRoom').addEventListener('click', () => createRoom().catch(e => alert(e.message)));
 
 (async () => {
-  if (roomId && token) { await refresh(); setInterval(refresh, 900); return; }
+  if (roomId && token) { await refresh(); if (!state.polling) { state.polling = true; setInterval(refresh, 900); } return; }
   try { await loadCharacters(); } catch (e) { alert(e.message); }
 })();
