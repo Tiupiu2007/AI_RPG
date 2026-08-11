@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI RPG — Laboratorio Carte</title>
+<link rel="stylesheet" href="cards.css">
+</head>
+<body>
+<main class="cards-app">
+<header class="topbar">
+  <div><div class="eyebrow">AI RPG / COMBAT SYSTEM</div><h1>LABORATORIO CARTE</h1><p>Crea una carta, definisci i suoi requisiti e assegnale la sua immagine.</p></div>
+  <a class="back" href="/battle.html">← Arena</a>
+</header>
+
+<section class="workspace">
+  <form id="cardForm" class="panel form-panel">
+    <div class="panel-title"><span>NUOVA CARTA</span><button type="button" id="resetBtn">Pulisci</button></div>
+    <label>ID tecnico<input id="id" required placeholder="fire_slash"></label>
+    <label>Nome<input id="name" required placeholder="Fendente di Fuoco"></label>
+    <div class="grid2">
+      <label>Tipo<select id="type"><option value="attack">Attacco</option><option value="skill">Skill</option><option value="power">Power</option><option value="defence">Difesa</option><option value="magic">Magia</option></select></label>
+      <label>Rarità<select id="rarity"><option>common</option><option>uncommon</option><option>rare</option><option>legendary</option></select></label>
+    </div>
+    <div class="grid2">
+      <label>Costo<input id="cost" type="number" min="0" value="1"></label>
+      <label>Risorsa<select id="resource"><option value="action_points">PA</option><option value="mana">Mana</option><option value="stamina">Stamina</option><option value="none">Nessuna</option></select></label>
+    </div>
+    <label>Descrizione<textarea id="description" placeholder="Cosa fa la carta durante il combattimento?"></textarea></label>
+    <label>Testo di atmosfera<textarea id="flavor" placeholder="Una frase opzionale da mostrare sulla carta."></textarea></label>
+    <label>Immagine<input id="image" placeholder="images/cards/fire_slash.png"><small>Puoi usare un percorso locale relativo a frontend/ oppure un URL.</small></label>
+
+    <div class="requirements">
+      <h3>REQUISITI PER IMPARARLA</h3>
+      <p>Ogni carta può avere requisiti completamente diversi.</p>
+      <div class="stat-grid" id="stats"></div>
+      <div class="grid2"><label>Livello minimo<input id="minLevel" type="number" min="1" value="1"></label><label>Razze consentite<input id="races" placeholder="elfo, mezzelfo"></label></div>
+      <label>Carte richieste<input id="requiresCards" placeholder="basic_spell, arcane_focus"></label>
+      <label>Tag richiesti<input id="requiredTags" placeholder="magic, fire"></label>
+    </div>
+
+    <button class="primary" type="submit">＋ CREA / AGGIORNA CARTA</button>
+  </form>
+
+  <section class="panel preview-panel">
+    <div class="panel-title"><span>ANTEPRIMA</span><button type="button" id="copyBtn">Copia JSON</button></div>
+    <article id="cardPreview" class="card-preview"></article>
+    <pre id="jsonOutput"></pre>
+    <div class="catalog-title">CATALOGO</div>
+    <div id="catalog" class="catalog"></div>
+    <p class="hint">Per rendere permanente una nuova carta nel gioco, aggiungi l'oggetto generato a <code>frontend/cards-data.json</code>. La struttura è volutamente piatta e semplice: una carta = un oggetto JSON.</p>
+  </section>
+</section>
+</main>
+<script src="cards.js"></script>
+</body>
+</html>
