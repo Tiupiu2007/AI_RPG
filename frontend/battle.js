@@ -40,10 +40,12 @@ function renderShareLinks(data) {
   links.classList.remove('hidden');
   links.innerHTML = `
     <strong>STANZA ${esc(data.room_id)} — LINK DI ACCESSO</strong>
-    <label>🎮 ${esc(data.player_a_name || 'Giocatore A')}<input readonly value="${esc(data.player_a_url)}" onclick="this.select()"></label>
-    <label>🎮 ${esc(data.player_b_name || 'Giocatore B')}<input readonly value="${esc(data.player_b_url)}" onclick="this.select()"></label>
-    <label>👁 ${esc(data.spectator_name || 'Spettatore / Server')}<input readonly value="${esc(data.spectator_url)}" onclick="this.select()"></label>
-    <small>Seleziona e copia il link del relativo personaggio. Il link spettatore è quello da conservare tu.</small>`;
+    <label>🎮 ${esc(data.player_a_name || 'Giocatore A')} · COMBATTIMENTO<input readonly value="${esc(data.player_a_url)}" onclick="this.select()"></label>
+    <label>📋 ${esc(data.player_a_name || 'Giocatore A')} · SCHEDA SOLA LETTURA<input readonly value="${esc(data.player_a_character_url || '')}" onclick="this.select()"></label>
+    <label>🎮 ${esc(data.player_b_name || 'Giocatore B')} · COMBATTIMENTO<input readonly value="${esc(data.player_b_url)}" onclick="this.select()"></label>
+    <label>📋 ${esc(data.player_b_name || 'Giocatore B')} · SCHEDA SOLA LETTURA<input readonly value="${esc(data.player_b_character_url || '')}" onclick="this.select()"></label>
+    <label>👁 ${esc(data.spectator_name || 'Spettatore / Server')} · PUBBLICO<input readonly value="${esc(data.spectator_url)}" onclick="this.select()"></label>
+    <small>I giocatori possono vedere e consultare esclusivamente la propria scheda. Solo il server può modificare i personaggi.</small>`;
 }
 
 async function createRoom() {
@@ -58,7 +60,6 @@ async function createRoom() {
   data.spectator_name = 'Spettatore / Server';
   renderShareLinks(data);
 
-  // Il server passa automaticamente alla vista spettatore, ma i link restano visibili.
   roomId = data.room_id;
   token = data.spectator_token;
   history.replaceState({}, '', `/battle.html?room=${data.room_id}&token=${data.spectator_token}`);
