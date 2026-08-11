@@ -9,6 +9,11 @@ import { initializeCharacterDescriptionUI } from "./character-description.js";
 let character = null;
 let availableRaces = [];
 
+const urlParams = new URLSearchParams(window.location.search);
+const pvpRoomId = urlParams.get("room");
+const pvpToken = urlParams.get("token");
+const playerSheetMode = Boolean(pvpRoomId && pvpToken);
+
 const inputs = {
     name: document.getElementById("name"), surname: document.getElementById("surname"),
     nickname: document.getElementById("nickname"), age: document.getElementById("age"),
@@ -39,7 +44,7 @@ function initializeRaceSelector() {
 }
 
 async function handleRaceChange() {
-    if (!character) return;
+    if (!character || playerSheetMode) return;
     const race = findRace(inputs.race.value);
     if (!race) return;
     character.identity.race = race.name;
@@ -70,7 +75,7 @@ function loadCharacterIntoUI() {
 }
 
 function updateCharacterFromUI() {
-    if (!character) return;
+    if (!character || playerSheetMode) return;
     character.identity.name = inputs.name.value.trim();
     character.identity.surname = inputs.surname.value.trim();
     character.identity.nickname = inputs.nickname.value.trim();
@@ -93,6 +98,7 @@ function initializeInputListeners() {
 }
 
 function newCharacter() {
+    if (playerSheetMode) return;
     if (!confirm("Creare un nuovo personaggio? Le modifiche non salvate verranno perse.")) return;
     character = createEmptyCharacter();
     clearLocalCharacter();
@@ -103,6 +109,10 @@ function newCharacter() {
 }
 
 async function resetCurrentCharacterHistory() {
+    if (playerSheetMode) {
+        alert("La gestione della memoria è riservata al server.");
+        return;
+    }
     if (!character?.id) {
         alert("Seleziona prima un personaggio salvato.");
         return;
@@ -137,6 +147,7 @@ function onGenerated(generated) {
 }
 
 async function runGeneration(options = {}) {
+    if (playerSheetMode) return;
     try { await generateCharacter(onGenerated, options); }
     catch { /* L'errore viene già mostrato dal modulo di generazione. */ }
 }
@@ -144,6 +155,7 @@ async function runGeneration(options = {}) {
 function addArenaButton() {
     const actions = document.querySelector(".topbar-actions");
     if (!actions || document.getElementById("arenaButton")) return;
+    if (playerSheetMode) return;
     const button = document.createElement("button");
     button.id = "arenaButton";
     button.className = "secondary-button";
@@ -151,6 +163,60 @@ function addArenaButton() {
     button.title = "Simula uno scontro tra due personaggi";
     button.addEventListener("click", () => { window.location.href = "/battle.html"; });
     actions.appendChild(button);
+}
+
+function lockPlayerSheet() {
+    document.body.classList.add("pvp-player-sheet");
+
+    const pageLabel = document.querySelector(".page-label");
+    if (pageLabel) pageLabel.textContent = "SCHEDA PERSONAGGIO · PVP";
+
+    const title = document.getElementById("characterTitle");
+    if (title) title.textContent = "Il tuo personaggio";
+
+    document.querySelectorAll(".topbar-actions").forEach(element => {
+        element.innerHTML = '<span class="player-sheet-badge">👤 SOLO VISUALIZZAZIONE</span>';
+    });
+
+    document.querySelectorAll(".character-list-title, .character-search, #characterList").forEach(element => {
+        element.style.display = "none";
+    });
+
+    // La navigazione delle sezioni resta disponibile, ma tutti i controlli
+    // che possono cambiare dati vengono resi non modificabili.
+    document.querySelectorAll("#content input, #content textarea").forEach(element => {
+        element.readOnly = true;
+        element.setAttribute("aria-readonly", "true");
+    });
+    document.querySelectorAll("#content select").forEach(element => {
+        element.disabled = true;
+    });
+    document.querySelectorAll("#content button").forEach(element => {
+        element.disabled = true;
+    });
+
+    // Le tab di navigazione sono solo visualizzazione e devono continuare a funzionare.
+    document.querySelectorAll(".sidebar .nav-button").forEach(element => {
+        element.disabled = false;
+    });
+}
+
+async function initializePlayerSheet() {
+    const roomResponse = await fetch(`/api/pvp/${encodeURIComponent(pvpRoomId)}?token=${encodeURIComponent(pvpToken)}`);
+    const roomData = await roomResponse.json().catch(() => ({}));
+    if (!roomResponse.ok) throw new Error(roomData.error || "Link PvP non valido o scaduto.");
+    if (roomData.is_spectator || !Number.isInteger(Number(roomData.you_are))) {
+        throw new Error("Il link spettatore non può aprire una scheda personaggio.");
+    }
+
+    const characterId = Number(roomData.you_are);
+    const response = await fetch(`/api/characters/${characterId}?room=${encodeURIComponent(pvpRoomId)}&token=${encodeURIComponent(pvpToken)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Non è possibile caricare il tuo personaggio.");
+
+    character = data;
+    lockPlayerSheet();
+    loadCharacterIntoUI();
 }
 
 async function initializeApp() {
@@ -161,6 +227,12 @@ async function initializeApp() {
         initializeNavigation();
         initializeRaceSelector();
         initializeInputListeners();
+
+        if (playerSheetMode) {
+            await initializePlayerSheet();
+            return;
+        }
+
         addArenaButton();
         document.getElementById("generateButton")?.addEventListener("click", () => runGeneration());
         window.addEventListener("ai-rpg-generate-character", event => runGeneration(event.detail || {}));
