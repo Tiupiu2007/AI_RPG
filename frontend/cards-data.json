@@ -1,0 +1,30 @@
+[
+  {
+    "id": "arcane_bolt",
+    "name": "Dardo Arcano",
+    "type": "attack",
+    "rarity": "common",
+    "cost": 1,
+    "resource": "mana",
+    "description": "Scaglia un proiettile arcano contro un bersaglio.",
+    "flavor": "Una scintilla di magia condensata in un istante.",
+    "image": "images/cards/arcane_bolt.png",
+    "requirements": {
+      "statistics": {
+        "intelligence": 35
+      },
+      "races": [],
+      "tags": ["magic"],
+      "requires_cards": [],
+      "min_level": 1
+    },
+    "effects": [
+      {
+        "type": "damage",
+        "amount": 14,
+        "damage_type": "arcane"
+      }
+    ],
+    "tags": ["magic", "attack"]
+  }
+]
