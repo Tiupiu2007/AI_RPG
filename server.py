@@ -10,6 +10,7 @@ from app.ai_provider import ask_character, MODEL_NAME
 from app.character_interaction import process_character_turn
 from app.battle import simulate_battle
 from app.pvp import create_room, serialize_room, perform_action, get_editor_character_id
+from app.combat.cards import load_cards, upsert_card, delete_card
 from app.characters.characters_identity import CharacterIdentity, generate_identity
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
 from app.characters.character_from_description import generate_character_from_description
@@ -29,8 +30,6 @@ from app.database.characters_db import (
 )
 from app.memory.memory import reset_character_history
 
-# 0.0.0.0 permette al server di essere raggiunto dalla LAN.
-# Per amici fuori dalla rete locale servirà poi un port forwarding/tunnel.
 HOST = "0.0.0.0"
 PORT = 8000
 ROOT_DIR = Path(__file__).resolve().parent
@@ -184,9 +183,7 @@ def generate_extra(identity, profile, source="system", description="", importanc
     random.shuffle(skill_names)
     skills = [{"name": name, "description": f"Competenza pratica sviluppata dal personaggio nell'ambito di {name.lower()}."} for name in skill_names[:random.randint(1, min(3, len(skill_names)))]]
     return {
-        "statistics": stats,
-        "abilities": abilities,
-        "skills": skills,
+        "statistics": stats, "abilities": abilities, "skills": skills,
         "conditions": {"health": max_health, "stamina": max_stamina, "mana": max_mana, "status": "Normale"},
         "relationships": [],
         "psychology": {key: value for key, value in profile.items() if key in {"mental_state", "emotional_stability", "fears", "desires", "values", "traumas"}},
@@ -199,13 +196,7 @@ def build_generated_character(identity, source="system", description="", importa
     profile = profile_to_dict(generate_character_profile(identity_to_dict(identity)))
     languages = get_race_languages(identity.race)
     extra = generate_extra(identity, profile, source, description, importance)
-    return {
-        "identity": identity_to_dict(identity),
-        "languages": [language_to_dict(language) for language in languages],
-        "psychology": extra["psychology"],
-        "personality": extra["personality"],
-        "extra": extra,
-    }
+    return {"identity": identity_to_dict(identity), "languages": [language_to_dict(language) for language in languages], "psychology": extra["psychology"], "personality": extra["personality"], "extra": extra}
 
 
 def generate_character(description="", source="system", importance="major"):
@@ -255,229 +246,141 @@ class RPGServer(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             request_path = parsed.path.rstrip("/") or "/"
             query = parse_qs(parsed.query)
-
             if request_path == "/api/races":
-                json_response(self, [{"id": race.id, "name": race.name, "description": race.description, "average_height": race.average_height, "average_weight": race.average_weight, "lifespan": race.lifespan, "rarity": race.rarity} for race in get_available_races()])
-                return
+                json_response(self, [{"id": race.id, "name": race.name, "description": race.description, "average_height": race.average_height, "average_weight": race.average_weight, "lifespan": race.lifespan, "rarity": race.rarity} for race in get_available_races()]); return
             if request_path == "/api/languages":
-                json_response(self, [{"id": language.id, "name": language.name, "prevalence": language.prevalence, "difficulty": language.difficulty} for language in get_available_languages()])
-                return
+                json_response(self, [{"id": language.id, "name": language.name, "prevalence": language.prevalence, "difficulty": language.difficulty} for language in get_available_languages()]); return
             if request_path == "/api/characters":
-                if not self._is_local_admin():
-                    raise PermissionError("L'elenco completo dei personaggi è disponibile solo sul server.")
-                json_response(self, get_all_identities())
-                return
+                self._require_admin(); json_response(self, get_all_identities()); return
             if request_path.startswith("/api/characters/"):
-                character_id = int(request_path.rsplit("/", 1)[1])
-                self._require_character_access(query, character_id)
+                character_id = int(request_path.rsplit("/", 1)[1]); self._require_character_access(query, character_id)
                 character = get_character(character_id)
-                if character is None:
-                    json_response(self, {"error": "Personaggio non trovato."}, 404)
-                    return
-                if not character["languages"]:
-                    character["languages"] = get_race_languages(character["identity"].race)
-                json_response(self, character_to_dict(character))
-                return
-
+                if character is None: json_response(self, {"error": "Personaggio non trovato."}, 404); return
+                if not character["languages"]: character["languages"] = get_race_languages(character["identity"].race)
+                json_response(self, character_to_dict(character)); return
+            if request_path == "/api/cards":
+                self._require_admin(); json_response(self, load_cards()); return
             if request_path.startswith("/api/pvp/"):
-                room_id = request_path.rsplit("/", 1)[1]
-                token = query.get("token", [""])[0]
-                json_response(self, serialize_room(room_id, token))
-                return
-
+                room_id = request_path.rsplit("/", 1)[1]; token = query.get("token", [""])[0]
+                json_response(self, serialize_room(room_id, token)); return
             if request_path == "/api/ai-status":
-                provider_path = Path(__file__).resolve().parent / "app" / "ai_provider.py"
+                provider_path = ROOT_DIR / "app" / "ai_provider.py"
                 code_hash = hashlib.sha256(provider_path.read_bytes()).hexdigest()[:12] if provider_path.exists() else "missing"
-                json_response(self, {"model": MODEL_NAME, "provider_file": str(provider_path), "provider_hash": code_hash})
-                return
-
+                json_response(self, {"model": MODEL_NAME, "provider_file": str(provider_path), "provider_hash": code_hash}); return
             relative = request_path.lstrip("/") or "index.html"
-            if relative == "index.html" and not self._is_local_admin() and self._editor_character_id(query) is None:
-                raise PermissionError("Editor non disponibile. Usa il link personale ricevuto per la partita PvP.")
+            if relative in {"index.html", "cards.html", "cards.js", "cards-data.json"} and not self._is_local_admin():
+                if relative == "index.html" and self._editor_character_id(query) is not None:
+                    pass
+                else:
+                    raise PermissionError("Questa pagina è riservata al server/amministratore.")
             self.serve_frontend()
         except PermissionError as error:
             json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
-            print("[SERVER ERROR]", error)
-            json_response(self, {"error": str(error)}, 500)
+            print("[SERVER ERROR]", error); json_response(self, {"error": str(error)}, 500)
 
     def do_POST(self):
         try:
-            parsed = urlparse(self.path)
-            request_path = parsed.path.rstrip("/")
-
+            parsed = urlparse(self.path); request_path = parsed.path.rstrip("/")
+            if request_path == "/api/cards":
+                self._require_admin(); card = self.read_json(); saved = upsert_card(card); json_response(self, {"success": True, "card": saved}); return
             if request_path == "/api/pvp/create":
-                self._require_admin()
-                data = self.read_json()
-                character_a_id = int(data.get("character_a_id"))
-                character_b_id = int(data.get("character_b_id"))
-                result = create_room(character_a_id, character_b_id)
+                self._require_admin(); data = self.read_json(); result = create_room(int(data.get("character_a_id")), int(data.get("character_b_id")))
                 host = self.headers.get("Host", f"127.0.0.1:{PORT}")
                 result["player_a_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['player_a_token']}"
                 result["player_b_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['player_b_token']}"
                 result["spectator_url"] = f"http://{host}/battle.html?room={result['room_id']}&token={result['spectator_token']}"
                 result["player_a_character_url"] = f"http://{host}/index.html?room={result['room_id']}&token={result['player_a_token']}"
                 result["player_b_character_url"] = f"http://{host}/index.html?room={result['room_id']}&token={result['player_b_token']}"
-                json_response(self, result)
-                return
-
+                json_response(self, result); return
             if request_path.startswith("/api/pvp/") and request_path.endswith("/action"):
                 parts = request_path.split("/")
-                if len(parts) != 5:
-                    raise ValueError("Endpoint PvP non valido.")
-                room_id = parts[3]
-                data = self.read_json()
-                token = str(data.pop("token", ""))
-                result = perform_action(room_id, token, data)
-                json_response(self, result)
-                return
-
+                if len(parts) != 5: raise ValueError("Endpoint PvP non valido.")
+                room_id = parts[3]; data = self.read_json(); token = str(data.pop("token", "")); json_response(self, perform_action(room_id, token, data)); return
             if request_path == "/api/generate-character":
-                self._require_admin()
-                data = self.read_json()
-                description = data.get("description", "")
-                source = data.get("source", "system")
-                importance = data.get("importance", "major")
-                json_response(self, generate_character(description, source, importance))
-                return
-
+                self._require_admin(); data = self.read_json(); json_response(self, generate_character(data.get("description", ""), data.get("source", "system"), data.get("importance", "major"))); return
             if request_path == "/api/battle":
-                self._require_admin()
-                data = self.read_json()
-                character_a_id = int(data.get("character_a_id"))
-                character_b_id = int(data.get("character_b_id"))
-                style = str(data.get("style", "cinematico"))
-                result = simulate_battle(character_a_id, character_b_id, style)
-                json_response(self, result)
-                return
-
+                self._require_admin(); data = self.read_json(); json_response(self, simulate_battle(int(data.get("character_a_id")), int(data.get("character_b_id")), str(data.get("style", "cinematico")))); return
             if request_path == "/api/character-interaction":
-                self._require_admin()
-                data = self.read_json()
-                character_id = int(data.get("character_id"))
-                player_input = str(data.get("message", "")).strip()
-                if not player_input:
-                    raise ValueError("Il messaggio non può essere vuoto.")
-                result = process_character_turn(character_id, player_input, data.get("recent_conversation", []))
-                json_response(self, result)
-                return
-
+                self._require_admin(); data = self.read_json(); character_id = int(data.get("character_id")); player_input = str(data.get("message", "")).strip()
+                if not player_input: raise ValueError("Il messaggio non può essere vuoto.")
+                json_response(self, process_character_turn(character_id, player_input, data.get("recent_conversation", []))); return
             if request_path == "/api/character-history/reset":
-                self._require_admin()
-                data = self.read_json()
-                character_id = int(data.get("character_id"))
-                clear_relationships = bool(data.get("clear_relationships", False))
-                result = reset_character_history(character_id, clear_relationships=clear_relationships)
-                print(f"[DATABASE] Cronologia personaggio resettata: ID {character_id} -> {result}")
-                json_response(self, {"success": True, "id": character_id, **result})
-                return
-
+                self._require_admin(); data = self.read_json(); character_id = int(data.get("character_id")); clear_relationships = bool(data.get("clear_relationships", False))
+                result = reset_character_history(character_id, clear_relationships=clear_relationships); json_response(self, {"success": True, "id": character_id, **result}); return
             if request_path == "/api/characters":
-                self._require_admin()
-                data = self.read_json()
-                identity = identity_from_dict(data.get("identity", data))
-                languages = languages_from_dict(data.get("languages", [])) or get_race_languages(identity.race)
-                extra = data.get("extra", {})
-                if not isinstance(extra, dict):
-                    extra = {}
-                character_id = data.get("id")
-                if character_id is None or str(character_id).strip() == "":
-                    character_id = save_character(identity, languages, extra_data=extra)
-                    print(f"[DATABASE] Personaggio creato: ID {character_id}")
-                else:
-                    character_id = save_character(identity, languages, extra_data=extra, character_id=int(character_id))
-                    print(f"[DATABASE] Personaggio aggiornato: ID {character_id}")
-                json_response(self, {"success": True, "id": character_id, "identity": identity_to_dict(identity, character_id), "languages": [language_to_dict(language) for language in languages], "extra": extra})
-                return
-
+                self._require_admin(); data = self.read_json(); identity = identity_from_dict(data.get("identity", data)); languages = languages_from_dict(data.get("languages", [])) or get_race_languages(identity.race)
+                extra = data.get("extra", {}); extra = extra if isinstance(extra, dict) else {}; character_id = data.get("id")
+                if character_id is None or str(character_id).strip() == "": character_id = save_character(identity, languages, extra_data=extra)
+                else: character_id = save_character(identity, languages, extra_data=extra, character_id=int(character_id))
+                json_response(self, {"success": True, "id": character_id, "identity": identity_to_dict(identity, character_id), "languages": [language_to_dict(language) for language in languages], "extra": extra}); return
             if request_path == "/api/race-languages":
-                data = self.read_json()
-                race = data.get("race")
-                if not isinstance(race, str) or not race.strip():
-                    json_response(self, {"error": "Razza non specificata."}, 400)
-                    return
-                json_response(self, [language_to_dict(language) for language in get_race_languages(race)])
-                return
-
+                data = self.read_json(); race = data.get("race")
+                if not isinstance(race, str) or not race.strip(): json_response(self, {"error": "Razza non specificata."}, 400); return
+                json_response(self, [language_to_dict(language) for language in get_race_languages(race)]); return
             json_response(self, {"error": "Endpoint non trovato."}, 404)
         except PermissionError as error:
             json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
-            print("[SERVER ERROR]", error)
-            json_response(self, {"error": str(error)}, 500)
+            print("[SERVER ERROR]", error); json_response(self, {"error": str(error)}, 500)
 
     def do_DELETE(self):
         try:
-            self._require_admin()
-            request_path = self.path.split("?", 1)[0].rstrip("/")
+            self._require_admin(); parsed = urlparse(self.path); request_path = parsed.path.rstrip("/")
+            if request_path.startswith("/api/cards/"):
+                card_id = request_path.rsplit("/", 1)[1]
+                if not delete_card(card_id): json_response(self, {"error": "Carta non trovata."}, 404); return
+                json_response(self, {"success": True, "id": card_id}); return
             if request_path.startswith("/api/characters/"):
-                character_id = int(request_path.rsplit("/", 1)[1])
-                delete_character(character_id)
-                print(f"[DATABASE] Personaggio eliminato: ID {character_id}")
-                json_response(self, {"success": True, "id": character_id})
-                return
+                character_id = int(request_path.rsplit("/", 1)[1]); delete_character(character_id); json_response(self, {"success": True, "id": character_id}); return
             json_response(self, {"error": "Endpoint non trovato."}, 404)
         except PermissionError as error:
             json_response(self, {"error": str(error)}, 403)
         except ValueError as error:
             json_response(self, {"error": str(error)}, 400)
         except Exception as error:
-            print("[SERVER ERROR]", error)
-            json_response(self, {"error": str(error)}, 500)
+            print("[SERVER ERROR]", error); json_response(self, {"error": str(error)}, 500)
 
     def read_json(self):
         content_length = int(self.headers.get("Content-Length", 0))
-        if content_length <= 0:
-            raise ValueError("Body JSON mancante.")
+        if content_length <= 0: raise ValueError("Body JSON mancante.")
         body = self.rfile.read(content_length)
-        try:
-            data = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("JSON della richiesta non valido.") from error
-        if not isinstance(data, dict):
-            raise ValueError("Il body JSON deve essere un oggetto.")
+        try: data = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error: raise ValueError("JSON della richiesta non valido.") from error
+        if not isinstance(data, dict): raise ValueError("Il JSON deve contenere un oggetto.")
         return data
 
     def serve_frontend(self):
         relative = self.path.split("?", 1)[0].lstrip("/") or "index.html"
-        file_path = (FRONTEND_DIR / relative).resolve()
-        if FRONTEND_DIR not in file_path.parents and file_path != FRONTEND_DIR:
-            self.send_error(403)
+        target = (FRONTEND_DIR / relative).resolve()
+        if FRONTEND_DIR.resolve() not in target.parents and target != FRONTEND_DIR.resolve():
+            raise PermissionError("Percorso non consentito.")
+        if not target.is_file():
+            self.send_error(404, "File non trovato")
             return
-        if not file_path.exists() or not file_path.is_file():
-            file_path = FRONTEND_DIR / "index.html"
-        content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-        data = file_path.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", f"{content_type}; charset=utf-8" if content_type.startswith("text/") else content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        mime, _ = mimetypes.guess_type(str(target)); mime = mime or "application/octet-stream"
+        data = target.read_bytes(); self.send_response(200); self.send_header("Content-Type", mime); self.send_header("Content-Length", str(len(data))); self.end_headers()
+        try: self.wfile.write(data)
+        except (BrokenPipeError, ConnectionAbortedError): pass
 
 
 def run_server():
     init_database()
-    print("=" * 60)
-    print("AI RPG SERVER")
     print(f"AI MODEL: {MODEL_NAME}")
     print("AI PROVIDER: app.ai_provider")
     print("AI STATUS: http://127.0.0.1:8000/api/ai-status")
     print("PVP ARENA: http://127.0.0.1:8000/battle.html")
+    print("CARD LAB: http://127.0.0.1:8000/cards.html (solo server)")
     print("LISTEN: 0.0.0.0:8000")
-    print("=​" * 60)
     server = HTTPServer((HOST, PORT), RPGServer)
     print(f"Server avviato sulla porta {PORT}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer arrestato.")
-    finally:
-        server.server_close()
+    try: server.serve_forever()
+    except KeyboardInterrupt: pass
+    finally: server.server_close()
 
 
-if __name__ == "__main__":
-    run_server()
+if __name__ == "__main__": run_server()
