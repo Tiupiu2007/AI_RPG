@@ -5,7 +5,7 @@ import re
 
 from app.ai_provider import ask_ollama
 from app.database.characters_db import get_character, save_character
-from app.memory.memory import create_event, create_memory, get_character_memories, get_recent_events
+from app.memory.memory import create_event, create_memory, get_character_memories, get_recent_events, reset_character_history
 
 
 MAX_HISTORY = 40
@@ -44,16 +44,18 @@ def reset_story_history(character_id: int):
     if not isinstance(extra, dict):
         extra = {}
 
-    # La cronologia della chat è una cache narrativa. Le memorie/eventi
-    # persistenti vengono lasciati intatti: "Nuova storia" deve però
-    # ripartire senza la vecchia conversazione.
+    # Una nuova storia deve davvero ripartire pulita: elimina eventi, memorie
+    # e stato narrativo della storia precedente, mantenendo il personaggio e
+    # le relazioni sociali persistenti.
+    reset_character_history(character_id, clear_relationships=False)
+    character = get_character(character_id)
+    if character is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato.")
+    extra = character.get("extra", {})
+    if not isinstance(extra, dict):
+        extra = {}
     extra.pop("story_chat", None)
-    save_character(
-        character["identity"],
-        character["languages"],
-        extra_data=extra,
-        character_id=character_id,
-    )
+    save_character(character["identity"], character["languages"], extra_data=extra, character_id=character_id)
 
 
 def _json_safe(value):
