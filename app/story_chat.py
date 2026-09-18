@@ -4,6 +4,7 @@ import json
 import re
 
 from app.ai_provider import ask_ollama
+from app.game_engine import advance_turn, ensure_game_state, snapshot
 from app.database.characters_db import get_character, save_character
 from app.memory.memory import create_event, create_memory, get_character_memories, get_recent_events, reset_character_history
 
@@ -102,6 +103,7 @@ def _build_context(character: dict) -> dict:
             "appearance": identity.appearance,
         },
         "state": extra.get("state", {}) if isinstance(extra.get("state"), dict) else {},
+        "authoritative_game_state": snapshot(extra),
         "psychology": extra.get("psychology", {}),
         "personality": extra.get("personality", {}),
         "statistics": extra.get("statistics", {}),
@@ -159,14 +161,14 @@ Se il PLAYER parla con qualcuno, scrivi la risposta dell'NPC e le conseguenze os
 
 CONTINUITÀ E CANONE
 La storia deve avere continuità ferrea.
-- Il CONTEXT, la cronologia della conversazione e gli eventi già narrati sono la fonte autorevole per ciò che è già stabilito.
+- Il CONTEXT, lo stato autorevole del GAME ENGINE, la cronologia della conversazione e gli eventi già narrati sono la fonte autorevole per ciò che è già stabilito.
 - Quando introduci un fatto nella narrazione, quel fatto diventa canonico per i turni successivi.
 - Non contraddire, sostituire o riscrivere retroattivamente fatti già stabiliti.
 - Puoi aggiungere nuovi dettagli in seguito, ma devono essere compatibili con ciò che hai già detto.
 - Non trasformare una nuova versione di un luogo, oggetto o personaggio nella sua versione "vera" se contraddice quanto narrato prima.
 - Se un elemento era realmente nascosto, lontano, al buio, coperto o non riconoscibile, puoi farlo scoprire più avanti spiegando implicitamente o esplicitamente perché non era stato notato prima. Non usare questa possibilità per correggere una dimenticanza o una contraddizione.
 - Non inventare un passato del PLAYER, relazioni, ricordi o fatti precedenti come se fossero sempre esistiti.
-- Non cambiare statistiche, HP, stamina, mana, inventario, relazioni o altre variabili numeriche solo perché lo racconti nella narrazione.
+- Non cambiare statistiche, HP, stamina, mana, inventario, relazioni o altre variabili numeriche solo perché lo racconti nella narrazione. Questi valori sono controllati dal GAME ENGINE.
 
 LIBERTÀ NARRATIVA
 Non devi aspettare che il PLAYER descriva ogni singolo elemento della scena.
@@ -216,6 +218,7 @@ Una memoria persistente va creata solo per un fatto realmente importante e utile
 Il normale scambio di battute non è memoria.
 Se il PLAYER dice esplicitamente "ricordati..." o equivalente, il server salverà il fatto separatamente.
 Non trasformare automaticamente ogni dettaglio ambientale in memoria o stato del database.
+Non modificare lo stato autorevole del GAME ENGINE inventando numeri o effetti meccanici nella narrazione.
 
 OUTPUT
 Restituisci esclusivamente un singolo JSON valido:
@@ -249,6 +252,8 @@ def story_turn(character_id: int, player_message: str):
     if not isinstance(extra, dict):
         extra = {}
 
+    ensure_game_state(extra)
+    advance_turn(extra)
     history = _clean_history(extra)
     context = _build_context(character)
 
