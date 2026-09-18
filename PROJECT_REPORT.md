@@ -1,0 +1,467 @@
+# AI_RPG — Report del progetto
+
+Ultimo aggiornamento: 18 settembre 2026
+
+## 1. Scopo
+
+AI_RPG è un RPG narrativo persistente in italiano. Il giocatore scrive liberamente cosa vuole fare e l'IA agisce come Game Master.
+
+Principio fondamentale:
+
+> Il mondo appartiene al narratore. Il personaggio appartiene al giocatore.
+
+L'obiettivo tecnico è separare progressivamente la libertà narrativa dell'IA dalla gestione autorevole dello stato di gioco.
+
+---
+
+## 2. Stack attuale
+
+- Python 3.14.2
+- Ollama 0.32.6
+- Modello previsto: qwen3:30b-a3b-instruct-2507-q4_K_M
+- Backend Python
+- Frontend HTML/CSS/JavaScript
+- Database SQLite: `data/game.db`
+- API locali tramite `server.py`
+- Git branch principale: `main`
+
+---
+
+## 3. Avvio
+
+Il progetto può essere avviato con:
+
+1. Ollama in esecuzione.
+2. Modello Ollama disponibile.
+3. `python server.py`
+4. Apertura di `http://127.0.0.1:8000/chat.html`
+
+È presente anche `avvia_ai_rpg.bat` per facilitare l'avvio su Windows.
+
+---
+
+## 4. Sistema narrativo — FUNZIONANTE
+
+Il file principale è:
+
+`app/story_chat.py`
+
+Il sistema attuale:
+
+- riceve un messaggio libero del giocatore;
+- mantiene la cronologia della storia;
+- usa fino a 40 messaggi di cronologia;
+- passa gli ultimi 12 messaggi al prompt;
+- recupera memorie persistenti;
+- recupera eventi recenti;
+- passa all'IA lo stato autorevole del Game Engine;
+- salva la risposta dell'IA;
+- registra ogni turno come evento;
+- supporta memorie esplicite tramite frasi come "ricordati...";
+- mantiene un canone persistente del mondo tramite `world_canon`;
+- limita il canone a 100 fatti;
+- richiede all'IA un JSON con narrazione e nuovi fatti canonici.
+
+---
+
+## 5. Regole narrative attualmente implementate
+
+L'IA è istruita a:
+
+- parlare del giocatore sempre in seconda persona;
+- non controllare il personaggio del giocatore;
+- non inventare azioni, dialoghi, pensieri, emozioni o decisioni del giocatore;
+- non inventare equipaggiamento, magie, abilità, ferite, ricordi o relazioni personali non presenti nel contesto;
+- considerare il Game Engine come fonte autorevole per i dati meccanici;
+- mantenere la continuità tra i turni;
+- non contraddire fatti già stabiliti;
+- distinguere ciò che il personaggio sa da ciò che conosce il narratore;
+- permettere al narratore di costruire liberamente l'ambiente;
+- usare la scoperta progressiva dei dettagli;
+- non rivelare automaticamente tutto ciò che esiste in una scena;
+- non trasformare ogni osservazione in un mistero;
+- evitare rune, scritte criptiche, maledizioni e soprannaturale senza una ragione narrativa;
+- descrivere normalmente materiali, forme, luce, sporco, usura e oggetti;
+- non aggiungere necessariamente un dettaglio importante a ogni turno;
+- lasciare al giocatore la scelta delle azioni successive;
+- determinare le conseguenze plausibili delle azioni rischiose senza garantire automaticamente il successo;
+- evitare menu A/B/C e risposte a scelta multipla;
+- mantenere un ritmo normalmente breve, di circa 30-120 parole.
+
+---
+
+## 6. Canone persistente — FUNZIONANTE
+
+I fatti importanti stabiliti durante la narrazione possono essere restituiti dall'IA in:
+
+`canon_facts`
+
+Questi vengono salvati in:
+
+`extra["world_canon"]`
+
+Il sistema evita di trasformare ogni frase narrativa in un fatto persistente.
+
+Il canone viene eliminato quando si resetta completamente la storia del personaggio.
+
+---
+
+## 7. Game Engine — PRESENTE E COLLEGATO
+
+Il Game Engine si trova in:
+
+`app/game_engine/__init__.py`
+
+Gestisce una base di stato autorevole contenente:
+
+- posizione;
+- flag;
+- effetti attivi;
+- turno;
+- HP;
+- HP massimi;
+- stamina;
+- stamina massima;
+- mana;
+- mana massima;
+- stato/condizione;
+- inventario;
+- statistiche;
+- abilità;
+- skill;
+- magia.
+
+Sono presenti funzioni per:
+
+- inizializzare lo stato;
+- creare snapshot dello stato;
+- avanzare il turno;
+- spendere risorse;
+- ripristinare risorse;
+- modificare la salute;
+- impostare flag;
+- controllare flag;
+- cambiare posizione;
+- aggiungere oggetti;
+- rimuovere oggetti.
+
+Lo stato è esposto anche tramite:
+
+`/api/game-state/<character_id>`
+
+### Limite attuale
+
+Il Game Engine non è ancora il sistema completo che interpreta automaticamente ogni azione libera del giocatore.
+
+L'architettura prevista è:
+
+```
+PLAYER
+↓
+interpretazione dell'intento
+↓
+validazione/calcolo del GAME ENGINE
+↓
+modifica reale dello stato
+↓
+narrazione dell'esito
+```
+
+Questa è una delle prossime fasi principali.
+
+---
+
+## 8. Database e personaggi
+
+Il progetto dispone di un sistema di personaggi con:
+
+- identità;
+- lingue;
+- profilo;
+- razze;
+- inventario;
+- magia;
+- denaro;
+- statistiche;
+- abilità;
+- stato;
+- dati extra persistenti.
+
+La gestione principale passa da:
+
+`app/database/characters_db.py`
+
+Il sistema narrativo utilizza il personaggio presente nel database come fonte del contesto.
+
+---
+
+## 9. Memoria ed eventi — PRESENTI
+
+Directory:
+
+`app/memory/`
+
+Sono presenti:
+
+- gestione della memoria;
+- contesto;
+- eventi recenti;
+- memoria persistente;
+- reset della cronologia.
+
+Il normale testo della narrazione non viene automaticamente trasformato in memoria persistente.
+
+Una richiesta esplicita come:
+
+`ricordati che ...`
+
+viene salvata separatamente.
+
+---
+
+## 10. Mondo di gioco — PRESENTE
+
+Directory:
+
+`app/world/`
+
+Sono presenti sistemi/moduli per:
+
+- biomi;
+- consumo;
+- demografia;
+- economia;
+- ambiente;
+- fazioni;
+- geografia;
+- logistica;
+- luoghi;
+- movimento;
+- pathfinding;
+- popolazione;
+- posizioni;
+- regioni;
+- sicurezza;
+- condizioni degli insediamenti;
+- insediamenti;
+- tempo;
+- commercio;
+- repository del mondo;
+- stato del mondo.
+
+Questi moduli costituiscono la base per un mondo simulato persistente.
+
+---
+
+## 11. Combattimento — PRESENTE, NON ANCORA PARTE DEL FLUSSO NARRATIVO PRINCIPALE
+
+Sono presenti sistemi separati per:
+
+- modelli di combattimento;
+- simulazione del combattimento;
+- AI di battaglia;
+- deck;
+- simulatore di combattimento;
+- validazione/esecuzione di alcune azioni.
+
+Il frontend contiene anche una pagina dedicata al simulatore di combattimento.
+
+Questo sistema esiste nel repository, ma il collegamento completo tra:
+
+`azione libera del giocatore → Game Engine → combattimento → narrazione`
+
+è ancora da completare.
+
+---
+
+## 12. Relazioni e interazioni
+
+Sono presenti moduli per:
+
+- relazioni;
+- interazione tra personaggi;
+- gestione delle relazioni persistenti.
+
+La narrazione può utilizzare i dati disponibili, ma il sistema completo di NPC persistenti e relazioni dinamiche deve ancora essere integrato nel flusso principale.
+
+---
+
+## 13. Frontend — PRESENTE
+
+Il frontend contiene interfacce per:
+
+- pagina principale;
+- chat narrativa;
+- gestione personaggi;
+- descrizione personaggio;
+- profilo;
+- sezioni del personaggio;
+- riepilogo;
+- stato;
+- inventario;
+- database;
+- lingue;
+- combattimento;
+- simulatore di combattimento.
+
+Sono presenti file HTML, CSS e JavaScript separati.
+
+---
+
+## 14. API / Backend
+
+`server.py` gestisce il server locale e le API del progetto.
+
+Tra le funzioni già collegate al sistema narrativo c'è l'accesso allo stato autorevole del Game Engine.
+
+Il backend collega:
+
+- database;
+- personaggi;
+- memoria;
+- eventi;
+- Game Engine;
+- provider AI;
+- frontend.
+
+---
+
+## 15. Provider AI
+
+Il progetto dispone di:
+
+`app/ai_provider.py`
+
+e del relativo package:
+
+`app/ai_provider/`
+
+Il sistema è predisposto per comunicare con Ollama e utilizzare il modello locale.
+
+La configurazione narrativa attuale richiede risposte strutturate JSON per evitare che la risposta dell'IA venga interpretata liberamente dal backend.
+
+---
+
+## 16. Test
+
+Sono presenti test per varie parti del progetto, inclusi:
+
+- database personaggi;
+- identità;
+- movimento del mondo;
+- popolazione degli insediamenti.
+
+Il progetto contiene inoltre script di supporto per il reset dei dati di test.
+
+La presenza dei test non significa che ogni sistema dell'intero progetto sia coperto o completamente verificato.
+
+---
+
+## 17. Documentazione
+
+La documentazione tecnica utile rimane nella directory:
+
+`docs/`
+
+Sono presenti specifiche per:
+
+- personaggi;
+- inventario;
+- magia;
+- mondo;
+- TODO.
+
+Sono presenti inoltre:
+
+- `README.md`
+- `AI_MODEL.md`
+
+Questo file costituisce il report generale dello stato del progetto; le specifiche tecniche dettagliate restano nei rispettivi documenti.
+
+---
+
+## 18. Cosa funziona oggi nel nucleo RPG
+
+### FUNZIONANTE
+
+- chat narrativa locale;
+- comunicazione con Ollama;
+- cronologia della storia;
+- memoria persistente;
+- eventi;
+- reset della storia;
+- canone persistente;
+- contesto del personaggio;
+- seconda persona;
+- protezione dell'agency del giocatore tramite prompt;
+- protezione dei dati personali del personaggio tramite prompt;
+- Game Engine collegato al sistema narrativo;
+- stato autorevole esposto al backend/frontend;
+- stato base di HP/stamina/mana/inventario/posizione/flag;
+- frontend della chat;
+- database dei personaggi.
+
+### PRESENTE MA DA INTEGRARE COMPLETAMENTE
+
+- parser automatico dell'intento del giocatore;
+- esecuzione automatica delle azioni attraverso il Game Engine;
+- movimento completo narrativo + meccanico;
+- uso completo dell'inventario nelle azioni libere;
+- magia con costi e conseguenze gestiti dall'engine;
+- combattimento integrato nella storia;
+- NPC persistenti con stato completo;
+- relazioni dinamiche integrate;
+- quest;
+- simulazione completa del mondo;
+- save/load completo dell'intero mondo;
+- distribuzione Steam senza dipendenza manuale da Ollama.
+
+---
+
+## 19. Prossime priorità
+
+L'ordine consigliato per continuare il progetto è:
+
+1. Parser dell'intento del giocatore.
+2. Validazione dell'azione tramite Game Engine.
+3. Esecuzione delle modifiche reali allo stato.
+4. Inventario utilizzabile dalla narrazione.
+5. Movimento e posizioni persistenti.
+6. Magia e consumo delle risorse.
+7. Combattimento integrato.
+8. NPC persistenti e relazioni.
+9. Quest.
+10. Save/load completo.
+11. Packaging per Steam e gestione del modello AI.
+
+---
+
+## 20. Regola architetturale fondamentale
+
+L'IA non deve diventare la fonte di verità del gioco.
+
+L'IA è responsabile principalmente di:
+
+- interpretazione narrativa;
+- descrizione;
+- dialoghi degli NPC;
+- atmosfera;
+- costruzione locale del mondo;
+- conseguenze narrative.
+
+Il Game Engine deve essere responsabile di:
+
+- HP;
+- stamina;
+- mana;
+- inventario;
+- statistiche;
+- abilità;
+- magia;
+- posizione;
+- flag;
+- effetti;
+- combattimento;
+- altri dati meccanici persistenti.
+
+Questa separazione è la base per rendere il progetto stabile e, in futuro, trasformarlo in un gioco distribuibile.
