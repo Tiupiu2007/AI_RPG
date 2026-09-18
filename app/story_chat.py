@@ -12,6 +12,7 @@ from app.memory.memory import create_event, create_memory, get_character_memorie
 MAX_HISTORY = 40
 MAX_MEMORIES = 20
 MAX_EVENTS = 20
+MAX_CANON_FACTS = 100
 
 
 def _clean_history(extra: dict) -> list[dict]:
@@ -56,6 +57,7 @@ def reset_story_history(character_id: int):
     if not isinstance(extra, dict):
         extra = {}
     extra.pop("story_chat", None)
+    extra.pop("world_canon", None)
     save_character(character["identity"], character["languages"], extra_data=extra, character_id=character_id)
 
 
@@ -119,6 +121,7 @@ def _build_context(character: dict) -> dict:
         },
         "memories": get_character_memories(character["id"], limit=MAX_MEMORIES, include_secrets=True),
         "recent_events": get_recent_events(character["id"], limit=MAX_EVENTS),
+        "world_canon": extra.get("world_canon", []) if isinstance(extra.get("world_canon"), list) else [],
     }
 
 
@@ -162,7 +165,7 @@ Se il PLAYER parla con qualcuno, scrivi la risposta dell'NPC e le conseguenze os
 CONTINUITÀ E CANONE
 La storia deve avere continuità ferrea.
 - Il CONTEXT, lo stato autorevole del GAME ENGINE, la cronologia della conversazione e gli eventi già narrati sono la fonte autorevole per ciò che è già stabilito.
-- Quando introduci un fatto nella narrazione, quel fatto diventa canonico per i turni successivi.
+- Quando introduci un fatto nella narrazione, quel fatto diventa canonico per i turni successivi. I fatti canonici importanti sono riportati anche in `world_canon` nel CONTEXT.
 - Non contraddire, sostituire o riscrivere retroattivamente fatti già stabiliti.
 - Puoi aggiungere nuovi dettagli in seguito, ma devono essere compatibili con ciò che hai già detto.
 - Non trasformare una nuova versione di un luogo, oggetto o personaggio nella sua versione "vera" se contraddice quanto narrato prima.
@@ -217,14 +220,16 @@ MEMORIA
 Una memoria persistente va creata solo per un fatto realmente importante e utile nel futuro.
 Il normale scambio di battute non è memoria.
 Se il PLAYER dice esplicitamente "ricordati..." o equivalente, il server salverà il fatto separatamente.
-Non trasformare automaticamente ogni dettaglio ambientale in memoria o stato del database.
+Non trasformare automaticamente ogni dettaglio ambientale in memoria o stato del database. Usa `world_canon` solo per fatti persistenti e utili alla continuità, non per ogni frase descrittiva.
 Non modificare lo stato autorevole del GAME ENGINE inventando numeri o effetti meccanici nella narrazione.
 
 OUTPUT
 Restituisci esclusivamente un singolo JSON valido:
 {{
-  "narration": "la risposta del Game Master"
+  "narration": "la risposta del Game Master",
+  "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"]
 }}
+`canon_facts` deve contenere frasi brevi, concrete e verificabili. Inserisci solo fatti che dovranno restare veri nei turni futuri (per esempio: "La porta della stanza è di legno scuro", "Fuori dalla finestra si vede una foresta"). Non inserire azioni o pensieri del PLAYER, risultati temporanei o semplici impressioni stilistiche. Se non hai stabilito nuovi fatti persistenti, usa [].
 
 Non restituire markdown.
 Non restituire A/B/C.
@@ -285,6 +290,21 @@ def story_turn(character_id: int, player_message: str):
 
     narration = narration.strip()
 
+    canon_facts = result.get("canon_facts", [])
+    if not isinstance(canon_facts, list):
+        canon_facts = []
+    canon_facts = [str(f).strip() for f in canon_facts if isinstance(f, str) and f.strip()]
+    canon_facts = canon_facts[:20]
+
+    existing_canon = extra.get("world_canon", [])
+    if not isinstance(existing_canon, list):
+        existing_canon = []
+    existing_canon = [str(f).strip() for f in existing_canon if isinstance(f, str) and f.strip()]
+    for fact in canon_facts:
+        if fact not in existing_canon:
+            existing_canon.append(fact)
+    extra["world_canon"] = existing_canon[-MAX_CANON_FACTS:]
+
     explicit_memory = _explicit_memory(message, character["identity"].name)
     memory_id = None
     if explicit_memory:
@@ -318,6 +338,7 @@ def story_turn(character_id: int, player_message: str):
         {
             "player_message": message,
             "narration": narration,
+            "canon_facts": canon_facts,
             "explicit_memory_id": memory_id,
         },
     )
