@@ -26,6 +26,7 @@ from app.database.characters_db import (
     delete_character,
 )
 from app.memory.memory import reset_character_history
+from app.story_chat import get_story_history, reset_story_history, story_turn
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -247,6 +248,10 @@ class RPGServer(BaseHTTPRequestHandler):
                     character["languages"] = get_race_languages(character["identity"].race)
                 json_response(self, character_to_dict(character))
                 return
+            if request_path.startswith("/api/story-history/"):
+                character_id = int(request_path.rsplit("/", 1)[1])
+                json_response(self, {"conversation": get_story_history(character_id)})
+                return
             if request_path == "/api/ai-status":
                 provider_path = Path(__file__).resolve().parent / "app" / "ai_provider.py"
                 code_hash = hashlib.sha256(provider_path.read_bytes()).hexdigest()[:12] if provider_path.exists() else "missing"
@@ -266,6 +271,21 @@ class RPGServer(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             request_path = self.path.split("?", 1)[0].rstrip("/")
+            if request_path == "/api/story-turn":
+                data = self.read_json()
+                character_id = int(data.get("character_id"))
+                message = str(data.get("message", "")).strip()
+                result = story_turn(character_id, message)
+                json_response(self, result)
+                return
+
+            if request_path == "/api/story-history/reset":
+                data = self.read_json()
+                character_id = int(data.get("character_id"))
+                reset_story_history(character_id)
+                json_response(self, {"success": True})
+                return
+
             if request_path == "/api/generate-character":
                 data = self.read_json()
                 description = data.get("description", "")
