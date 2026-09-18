@@ -141,6 +141,17 @@ async function runGeneration(options = {}) {
     catch { /* L'errore viene già mostrato dal modulo di generazione. */ }
 }
 
+function addChatButton() {
+    const actions = document.querySelector(".topbar-actions");
+    if (!actions || document.getElementById("storyChatButton")) return;
+    const button = document.createElement("button");
+    button.id = "storyChatButton";
+    button.className = "secondary-button";
+    button.textContent = "💬 Storia";
+    button.addEventListener("click", () => { window.location.href = "/chat.html"; });
+    actions.appendChild(button);
+}
+
 function addArenaButton() {
     const actions = document.querySelector(".topbar-actions");
     if (!actions || document.getElementById("arenaButton")) return;
@@ -162,6 +173,7 @@ async function initializeApp() {
         initializeRaceSelector();
         initializeInputListeners();
         addArenaButton();
+        addChatButton();
         document.getElementById("generateButton")?.addEventListener("click", () => runGeneration());
         window.addEventListener("ai-rpg-generate-character", event => runGeneration(event.detail || {}));
         window.addEventListener("ai-rpg-reset-character-history", resetCurrentCharacterHistory);
