@@ -258,9 +258,15 @@ OUTPUT
 Restituisci esclusivamente un singolo JSON valido:
 {{
   "narration": "la risposta del Game Master",
+  "action": {
+    "type": "none",
+    "target_id": null,
+    "target_text": null,
+    "parameters": {}
+  },
   "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"]
 }}
-`canon_facts` deve contenere frasi brevi, concrete e verificabili. Inserisci solo fatti che dovranno restare veri nei turni futuri (per esempio: "La porta della stanza è di legno scuro", "Fuori dalla finestra si vede una foresta"). Non inserire azioni o pensieri del PLAYER, risultati temporanei o semplici impressioni stilistiche. Se non hai stabilito nuovi fatti persistenti, usa [].
+`action` rappresenta esclusivamente l'intento meccanico riconoscibile dal messaggio del PLAYER. Usa `none` quando il turno è puramente narrativo, osservativo, dialogico o quando non c'è ancora un'azione meccanica sufficientemente chiara. Tipi ammessi: `none`, `move`, `inspect`, `interact`, `use_item`, `cast_magic`, `attack`, `defend`, `talk`. Non inventare ID di bersagli, oggetti o abilità: usa `target_id` solo se presente nel CONTEXT, altrimenti `target_text`. `parameters` deve essere un oggetto semplice. Questa struttura è solo un'interpretazione dell'intento: NON significa che l'azione sia già stata eseguita dal GAME ENGINE.\n`canon_facts` deve contenere frasi brevi, concrete e verificabili. Inserisci solo fatti che dovranno restare veri nei turni futuri (per esempio: "La porta della stanza è di legno scuro", "Fuori dalla finestra si vede una foresta"). Non inserire azioni o pensieri del PLAYER, risultati temporanei o semplici impressioni stilistiche. Se non hai stabilito nuovi fatti persistenti, usa [].
 
 Non restituire markdown.
 Non restituire A/B/C.
@@ -321,6 +327,24 @@ def story_turn(character_id: int, player_message: str):
 
     narration = narration.strip()
 
+    action = result.get("action", {})
+    if not isinstance(action, dict):
+        action = {}
+    action_type = action.get("type", "none")
+    allowed_action_types = {"none", "move", "inspect", "interact", "use_item", "cast_magic", "attack", "defend", "talk"}
+    if action_type not in allowed_action_types:
+        action_type = "none"
+    target_id = action.get("target_id")
+    if target_id is not None and not isinstance(target_id, (int, str)):
+        target_id = None
+    target_text = action.get("target_text")
+    if target_text is not None and not isinstance(target_text, str):
+        target_text = str(target_text)
+    parameters = action.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+    action = {"type": action_type, "target_id": target_id, "target_text": target_text, "parameters": parameters}
+
     canon_facts = result.get("canon_facts", [])
     if not isinstance(canon_facts, list):
         canon_facts = []
@@ -369,6 +393,7 @@ def story_turn(character_id: int, player_message: str):
         {
             "player_message": message,
             "narration": narration,
+            "action": action,
             "canon_facts": canon_facts,
             "explicit_memory_id": memory_id,
         },
@@ -379,4 +404,5 @@ def story_turn(character_id: int, player_message: str):
         "conversation": history,
         "event_id": event_id,
         "created_memory_id": memory_id,
+        "action": action,
     }
