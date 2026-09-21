@@ -262,7 +262,7 @@ Restituisci esclusivamente un singolo JSON valido:
     "type": "none",
     "target_id": null,
     "target_text": null,
-    "parameters": {}
+    "parameters": {{}}
   },
   "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"]
 }}
