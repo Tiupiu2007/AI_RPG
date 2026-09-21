@@ -194,3 +194,127 @@ def remove_item(extra: dict, item_id: str, quantity: int = 1) -> bool:
     else:
         inventory.pop(item_id, None)
     return True
+
+
+SUPPORTED_ACTION_TYPES = {
+    "none", "move", "inspect", "interact", "use_item",
+    "cast_magic", "attack", "defend", "talk",
+}
+
+
+def _find_inventory_quantity(extra: dict, item_id: str) -> int:
+    inventory = extra.get("inventory", {})
+    if not isinstance(inventory, dict):
+        return 0
+    return _number(inventory.get(item_id), 0)
+
+
+def validate_action(extra: dict, action: dict) -> dict:
+    """Valida un intento AI senza modificare lo stato autorevole."""
+    ensure_game_state(extra)
+
+    if not isinstance(action, dict):
+        return {"valid": False, "reason": "Azione non valida.", "action": {"type": "none"}}
+
+    action_type = str(action.get("type", "none")).strip()
+    if action_type not in SUPPORTED_ACTION_TYPES:
+        return {"valid": False, "reason": f"Azione non supportata: {action_type}.", "action": {"type": "none"}}
+
+    target_id = action.get("target_id")
+    target_text = action.get("target_text")
+    parameters = action.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    normalized = {
+        "type": action_type,
+        "target_id": target_id,
+        "target_text": target_text if isinstance(target_text, str) else None,
+        "parameters": parameters,
+    }
+
+    if action_type == "move":
+        available = extra.get("available_location_ids", [])
+        if not isinstance(available, list):
+            available = []
+        if target_id is None:
+            return {"valid": False, "reason": "Movimento senza location_id.", "action": normalized}
+        if available and target_id not in available:
+            return {"valid": False, "reason": "La destinazione non è disponibile.", "action": normalized}
+
+    if action_type == "use_item":
+        item_id = target_id if target_id is not None else target_text
+        quantity = max(1, _number(parameters.get("quantity"), 1))
+        if not item_id:
+            return {"valid": False, "reason": "Uso oggetto senza identificare l'oggetto.", "action": normalized}
+        if _find_inventory_quantity(extra, str(item_id)) < quantity:
+            return {"valid": False, "reason": "L'oggetto non è presente nell'inventario in quantità sufficiente.", "action": normalized}
+
+    if action_type == "cast_magic":
+        ability_id = target_id if target_id is not None else parameters.get("ability_id")
+        abilities = extra.get("abilities", [])
+        magic = extra.get("magic", {})
+        known = set()
+        if isinstance(abilities, list):
+            for ability in abilities:
+                if isinstance(ability, str):
+                    known.add(ability)
+                elif isinstance(ability, dict):
+                    for key in ("id", "ability_id", "name"):
+                        if ability.get(key) is not None:
+                            known.add(str(ability[key]))
+        if isinstance(magic, dict):
+            spells = magic.get("spells", magic.get("abilities", []))
+            if isinstance(spells, list):
+                for spell in spells:
+                    if isinstance(spell, str):
+                        known.add(spell)
+                    elif isinstance(spell, dict):
+                        for key in ("id", "ability_id", "name"):
+                            if spell.get(key) is not None:
+                                known.add(str(spell[key]))
+        if ability_id is None or str(ability_id) not in known:
+            return {"valid": False, "reason": "Magia o abilità non presente nello stato autorevole.", "action": normalized}
+
+    return {"valid": True, "reason": None, "action": normalized}
+
+
+def execute_action(extra: dict, action: dict) -> dict:
+    """Esegue solo modifiche autorizzate dal Game Engine."""
+    validation = validate_action(extra, action)
+    if not validation["valid"]:
+        return {
+            "executed": False,
+            "valid": False,
+            "reason": validation["reason"],
+            "action": validation["action"],
+            "changes": {},
+        }
+
+    action = validation["action"]
+    action_type = action["type"]
+    parameters = action["parameters"]
+    changes = {}
+
+    if action_type == "move":
+        old_location = extra["game_state"].get("location")
+        new_location = action["target_id"]
+        set_location(extra, new_location)
+        changes["location"] = {"from": old_location, "to": new_location}
+
+    elif action_type == "use_item":
+        item_id = str(action["target_id"] if action["target_id"] is not None else action["target_text"])
+        quantity = max(1, _number(parameters.get("quantity"), 1))
+        remove_item(extra, item_id, quantity)
+        changes["inventory"] = {"removed": {item_id: quantity}}
+
+    # inspect, interact, attack, defend, talk e cast_magic non modificano ancora
+    # risorse da soli: il motore non possiede ancora le regole necessarie per farlo
+    # in modo affidabile. Meglio non inventare costi o danni.
+    return {
+        "executed": True,
+        "valid": True,
+        "reason": None,
+        "action": action,
+        "changes": changes,
+    }
