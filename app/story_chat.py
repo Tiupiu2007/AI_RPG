@@ -258,12 +258,12 @@ OUTPUT
 Restituisci esclusivamente un singolo JSON valido:
 {{
   "narration": "la risposta del Game Master",
-  "action": {
+  "action": {{
     "type": "none",
     "target_id": null,
     "target_text": null,
     "parameters": {{}}
-  },
+  }},
   "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"]
 }}
 `action` rappresenta esclusivamente l'intento meccanico riconoscibile dal messaggio del PLAYER. Usa `none` quando il turno è puramente narrativo, osservativo, dialogico o quando non c'è ancora un'azione meccanica sufficientemente chiara. Tipi ammessi: `none`, `move`, `inspect`, `interact`, `use_item`, `cast_magic`, `attack`, `defend`, `talk`. Non inventare ID di bersagli, oggetti o abilità: usa `target_id` solo se presente nel CONTEXT, altrimenti `target_text`. `parameters` deve essere un oggetto semplice. Questa struttura è solo un'interpretazione dell'intento: NON significa che l'azione sia già stata eseguita dal GAME ENGINE.\n`canon_facts` deve contenere frasi brevi, concrete e verificabili. Inserisci solo fatti che dovranno restare veri nei turni futuri (per esempio: "La porta della stanza è di legno scuro", "Fuori dalla finestra si vede una foresta"). Non inserire azioni o pensieri del PLAYER, risultati temporanei o semplici impressioni stilistiche. Se non hai stabilito nuovi fatti persistenti, usa [].
