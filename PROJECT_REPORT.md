@@ -384,6 +384,23 @@ Questo file costituisce il report generale dello stato del progetto; le specific
 
 ## 18. Cosa funziona oggi nel nucleo RPG
 
+### Architettura narrativa persistente
+
+Il turno principale usa una pipeline a tre fasi:
+
+1. Intent AI — interpreta il messaggio del PLAYER senza decidere il risultato.
+2. Game Engine — valida ed esegue l'azione e applica le modifiche reali.
+3. Narration AI — riceve lo stato già aggiornato e racconta esclusivamente il risultato.
+
+Il mondo possiede un proprio salvataggio SQLite (data/worlds.db) con orologio, eventi e stato persistente. Il personaggio mantiene il collegamento al proprio world_id.
+
+La memoria usa recupero per rilevanza, oltre alla memoria recente. I fatti canonici importanti vengono indicizzati come memorie persistenti.
+
+Le interazioni NPC hanno memoria propria, relazioni persistenti, conoscenza separata dal PLAYER e azioni validate dal game engine.
+
+Il combattimento narrativo è persistente: uno scontro può continuare attraverso più messaggi, il motore calcola danni, costi ed esiti e le condizioni risultanti vengono riportate nei personaggi.
+
+
 ### FUNZIONANTE
 
 - chat narrativa locale;
