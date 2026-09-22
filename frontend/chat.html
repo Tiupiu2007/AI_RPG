@@ -1,4 +1,39 @@
 <!doctype html>
 <html lang="it">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI RPG — Chat</title><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="chat.css"></head>
-<body><div class="chat-app"><header class="chat-topbar"><div><div class="page-label">AI RPG</div><h1>Storia</h1><div id="status" class="chat-status">Connessione...</div></div><div class="topbar-actions"><select id="characterSelect" class="chat-select"><option value="">Seleziona personaggio</option></select><button id="newStory" class="secondary-button">Nuova storia</button><a href="/" class="secondary-button chat-link">Personaggio</a></div></header><main class="chat-main"><section class="chat-panel"><div id="messages" class="messages"><div class="empty-chat">Seleziona un personaggio e inizia a scrivere.</div></div><form id="chatForm" class="composer"><textarea id="input" rows="2" placeholder="Scrivi liberamente cosa fai, dici o tenti di fare..."></textarea><button id="send" class="primary-button" type="submit">Invia</button></form></section><aside class="chat-sidebar"><div class="card"><div class="card-title">Personaggio</div><div id="characterInfo" class="character-info">Nessun personaggio selezionato.</div></div><div class="card"><div class="card-title">Stato</div><div id="gameState" class="game-state">—</div></div><div class="card"><div class="card-title">Quest</div><div id="questState" class="quest-state">Nessuna quest attiva.</div></div><div class="card"><div class="card-title">Regole</div><p class="chat-help">Puoi fare qualsiasi azione plausibile. Non ci sono menu A/B/C. L’IA gestisce il mondo e le conseguenze.</p></div></aside></main></div><script type="module" src="js/chat.js"></script></body></html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI RPG — Storia</title><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="chat.css"></head>
+<body>
+<div class="chat-app">
+<header class="chat-topbar">
+  <div><div class="page-label">AI RPG</div><h1>Storia</h1><div id="status" class="chat-status">Connessione...</div></div>
+  <div class="topbar-actions"><button id="newStory" class="secondary-button">Nuova storia</button></div>
+</header>
+<main class="chat-main">
+  <section class="chat-panel">
+    <div id="setup" class="story-setup">
+      <div class="setup-inner">
+        <div class="page-label">NUOVA CAMPAGNA</div>
+        <h2 id="setupTitle">Il tuo personaggio</h2>
+        <p id="setupDescription">Crea il personaggio che controllerai in tutte le tue storie.</p>
+        <textarea id="setupInput" rows="5" placeholder="Esempio: Un ragazzo di 18 anni, umano, curioso e senza esperienza nel combattimento..."></textarea>
+        <div class="setup-actions">
+          <button id="setupGenerate" class="secondary-button">Genera con l'IA</button>
+          <button id="setupContinue" class="primary-button">Continua</button>
+        </div>
+      </div>
+    </div>
+    <div id="messages" class="messages"><div class="empty-chat">Caricamento...</div></div>
+    <form id="chatForm" class="composer">
+      <textarea id="input" rows="2" placeholder="Scrivi liberamente cosa fai, dici o tenti di fare..."></textarea>
+      <button id="send" class="primary-button" type="submit">Invia</button>
+    </form>
+  </section>
+  <aside class="chat-sidebar">
+    <div class="card"><div class="card-title">Protagonista</div><div id="characterInfo" class="character-info">Nessun personaggio.</div></div>
+    <div class="card"><div class="card-title">Stato</div><div id="gameState" class="game-state">—</div></div>
+    <div class="card"><div class="card-title">Quest</div><div id="questState" class="quest-state">Nessuna quest attiva.</div></div>
+    <div class="card"><div class="card-title">Regole</div><p class="chat-help">Tu controlli il protagonista. Il mondo, gli NPC e gli eventi evolvono intorno a lui. Puoi scrivere liberamente cosa fai.</p></div>
+  </aside>
+</main>
+</div>
+<script type="module" src="js/chat.js"></script>
+</body></html>
