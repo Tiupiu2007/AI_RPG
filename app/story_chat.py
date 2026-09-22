@@ -72,6 +72,7 @@ def reset_story_history(character_id: int):
     extra.pop("world_id", None)
     extra.pop("combat_state", None)
     extra.pop("game_state", None)
+    extra.pop("quests", None)
     save_character(character["identity"], character["languages"], extra_data=extra, character_id=character_id)
 
 
