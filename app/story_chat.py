@@ -6,6 +6,7 @@ import re
 from app.ai_provider import ask_ollama
 from app.game_engine import advance_turn, ensure_game_state, snapshot, execute_action
 from app.database.characters_db import get_character, save_character
+from app.relationships.relationships import get_character_relationships
 from app.memory.memory import (
     create_event,
     create_memory,
@@ -127,6 +128,7 @@ def _build_context(character: dict, query: str = "") -> dict:
             "involved_characters": extra.get("involved_characters", []),
             "available_location_ids": extra.get("available_location_ids", []),
         },
+        "relationships": get_character_relationships(character["id"]),
         "memories": get_relevant_memories(
             character["id"],
             query,
