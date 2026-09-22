@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -89,6 +90,110 @@ def create_memory(
         return int(cursor.lastrowid)
     finally:
         connection.close()
+
+
+def _memory_tokens(text: str) -> set[str]:
+    """Estrae parole utili per un recupero semplice e deterministico."""
+    if not isinstance(text, str):
+        return set()
+    stopwords = {
+        "della", "delle", "degli", "dello", "dell", "alla", "alle", "agli",
+        "allo", "nel", "nella", "nelle", "negli", "nello", "sulla", "sulle",
+        "sugli", "sullo", "con", "per", "tra", "fra", "che", "una", "uno",
+        "sono", "come", "questa", "questo", "quello", "quella", "anche",
+        "dalla", "dal", "dei", "del", "di", "e", "o", "a", "il", "lo", "la",
+        "i", "gli", "le", "un", "in", "da", "non", "ha", "hai", "hanno",
+        "era", "essere", "piu", "più", "si", "se", "ma", "mi", "ti", "te",
+    }
+    words = re.findall(r"[a-zA-ZÀ-ÿ0-9_]{3,}", text.lower())
+    return {word for word in words if word not in stopwords}
+
+
+def get_relevant_memories(
+    character_id: int,
+    query: str,
+    limit: int = 12,
+    include_secrets: bool = True,
+) -> list[dict[str, Any]]:
+    """Recupera le memorie pertinenti al turno, non solo le più recenti."""
+    if not isinstance(character_id, int) or isinstance(character_id, bool):
+        raise ValueError("character_id non valido.")
+    if not isinstance(query, str):
+        raise ValueError("query deve essere una stringa.")
+    if not isinstance(include_secrets, bool):
+        raise ValueError("include_secrets deve essere booleano.")
+
+    limit = _bounded_limit(limit, DEFAULT_MEMORY_LIMIT, MAX_MEMORY_LIMIT)
+    query_tokens = _memory_tokens(query)
+
+    secret_clause = "" if include_secrets else "AND secret = 0"
+    connection = get_connection()
+    try:
+        rows = connection.execute(
+            f"""
+            SELECT id, character_id, memory_type, content, importance,
+                   secret, source_event_id, created_at
+            FROM memories
+            WHERE character_id = ? {secret_clause}
+            ORDER BY importance DESC, created_at DESC
+            LIMIT ?
+            """,
+            (character_id, MAX_MEMORY_LIMIT),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    memories = []
+    for row in rows:
+        item = {
+            "id": row["id"],
+            "character_id": row["character_id"],
+            "memory_type": row["memory_type"],
+            "content": row["content"],
+            "importance": row["importance"],
+            "secret": bool(row["secret"]),
+            "source_event_id": row["source_event_id"],
+            "created_at": row["created_at"],
+        }
+        overlap = len(query_tokens & _memory_tokens(item["content"]))
+        score = overlap * 10 + int(item["importance"])
+        if item["memory_type"] in {"fatto_personale", "relazione", "world_fact", "evento_importante"}:
+            score += 2
+        item["_relevance_score"] = score
+        memories.append(item)
+
+    memories.sort(
+        key=lambda item: (
+            item["_relevance_score"],
+            item["importance"],
+            item["created_at"],
+        ),
+        reverse=True,
+    )
+
+    result = []
+    for item in memories[:limit]:
+        item.pop("_relevance_score", None)
+        result.append(item)
+    return result
+
+
+def create_memory_from_fact(
+    character_id: int,
+    content: str,
+    memory_type: str = "world_fact",
+    importance: int = 7,
+    source_event_id: int | None = None,
+) -> int:
+    """Salva un fatto persistente importante come memoria strutturata."""
+    return create_memory(
+        character_id=character_id,
+        content=content,
+        memory_type=memory_type,
+        importance=importance,
+        secret=False,
+        source_event_id=source_event_id,
+    )
 
 
 def get_character_memories(
