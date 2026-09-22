@@ -75,6 +75,9 @@ def apply_social_effects(
     relationship = change_relationship(actor_id, target_id, **deltas) if deltas else None
     npc_state = _update_npc_state(target_id, effects)
 
+    from app.game_engine.progression import apply_progression
+    npc_progression = apply_progression(target_id, "talk", True)
+
     npc_event_id = create_event(
         target_id,
         "npc_reaction",
@@ -110,5 +113,6 @@ def apply_social_effects(
         "npc_event_id": npc_event_id,
         "relationship": relationship,
         "npc_state": npc_state,
+        "progression": npc_progression,
         "memory_id": memory_id,
     }
