@@ -138,7 +138,7 @@ def get_relevant_memories(
             ORDER BY importance DESC, created_at DESC
             LIMIT ?
             """,
-            (character_id, MAX_MEMORY_LIMIT),
+            (character_id, MAX_MEMORY_LIMIT * 10),
         ).fetchall()
     finally:
         connection.close()
@@ -156,9 +156,13 @@ def get_relevant_memories(
             "created_at": row["created_at"],
         }
         overlap = len(query_tokens & _memory_tokens(item["content"]))
+        # La pertinenza semantica semplice domina la recenza: una memoria vecchia
+        # ma direttamente collegata alla scena può quindi riemergere.
         score = overlap * 10 + int(item["importance"])
         if item["memory_type"] in {"fatto_personale", "relazione", "world_fact", "evento_importante"}:
             score += 2
+        if overlap == 0:
+            score -= 1
         item["_relevance_score"] = score
         memories.append(item)
 
