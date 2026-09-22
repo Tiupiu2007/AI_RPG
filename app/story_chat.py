@@ -99,7 +99,7 @@ def _explicit_memory(player_message: str, character_name: str) -> str | None:
     return f"Il PLAYER ha chiesto di ricordare: {fact}"
 
 
-def _present_characters(extra: dict, player_id: int) -> list[dict]:
+def _present_characters(extra: dict, player_id: int, query: str) -> list[dict]:
     raw = extra.get("characters_present", [])
     if not isinstance(raw, list):
         raw = []
@@ -127,6 +127,19 @@ def _present_characters(extra: dict, player_id: int) -> list[dict]:
             "appearance": identity.appearance,
             "personality": npc_extra.get("personality", {}),
             "state": npc_extra.get("state", {}),
+            "relationship_to_player": next(
+                (
+                    relation for relation in get_character_relationships(candidate)
+                    if relation.get("character_b_id") == player_id
+                ),
+                None,
+            ),
+            "private_memories": get_relevant_memories(
+                candidate,
+                query,
+                limit=8,
+                include_secrets=True,
+            ),
         })
     return result
 
@@ -138,7 +151,7 @@ def _build_context(character: dict, query: str = "") -> dict:
         extra = {}
 
     world = get_world_context(extra)
-    present_characters = _present_characters(extra, character["id"])
+    present_characters = _present_characters(extra, character["id"], query)
 
     return {
         "player": {
