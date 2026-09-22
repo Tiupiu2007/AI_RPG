@@ -483,6 +483,7 @@ def story_turn(character_id: int, player_message: str):
             },
             ensure_ascii=False,
         ),
+        temperature=0.15,
     )
 
     try:
@@ -530,6 +531,7 @@ def story_turn(character_id: int, player_message: str):
             },
             ensure_ascii=False,
         ),
+        temperature=0.8,
     )
 
     try:
