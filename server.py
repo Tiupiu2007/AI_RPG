@@ -27,6 +27,7 @@ from app.database.characters_db import (
 )
 from app.memory.memory import reset_character_history
 from app.story_chat import get_story_history, reset_story_history, story_turn
+from app.story_runtime import get_player_character, generate_player, create_story, get_story_setup
 from app.game_engine import ensure_game_state, snapshot
 from app.world.runtime import get_world_context
 
@@ -240,6 +241,13 @@ class RPGServer(BaseHTTPRequestHandler):
             if request_path == "/api/characters":
                 json_response(self, get_all_identities())
                 return
+            if request_path == "/api/player":
+                player = get_player_character()
+                if player is None:
+                    json_response(self, {"exists": False})
+                else:
+                    json_response(self, {"exists": True, "player": character_to_dict(player)})
+                return
             if request_path.startswith("/api/characters/"):
                 character_id = int(request_path.rsplit("/", 1)[1])
                 character = get_character(character_id)
@@ -249,6 +257,10 @@ class RPGServer(BaseHTTPRequestHandler):
                 if not character["languages"]:
                     character["languages"] = get_race_languages(character["identity"].race)
                 json_response(self, character_to_dict(character))
+                return
+            if request_path.startswith("/api/story-setup/"):
+                character_id = int(request_path.rsplit("/", 1)[1])
+                json_response(self, get_story_setup(character_id))
                 return
             if request_path.startswith("/api/story-history/"):
                 character_id = int(request_path.rsplit("/", 1)[1])
@@ -296,6 +308,21 @@ class RPGServer(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             request_path = self.path.split("?", 1)[0].rstrip("/")
+            if request_path == "/api/player":
+                data = self.read_json()
+                description = str(data.get("description", "")).strip()
+                player = generate_player(description)
+                json_response(self, {"success": True, "player": character_to_dict(player)})
+                return
+
+            if request_path == "/api/story/start":
+                data = self.read_json()
+                player_id = int(data.get("player_id"))
+                prompt = str(data.get("prompt", "")).strip()
+                result = create_story(player_id, prompt, generate=True)
+                json_response(self, result)
+                return
+
             if request_path == "/api/story-turn":
                 data = self.read_json()
                 character_id = int(data.get("character_id"))
