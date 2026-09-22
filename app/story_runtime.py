@@ -131,6 +131,7 @@ Restituisci JSON:
     "description": "ciò che è realmente presente all'inizio"
   }},
   "player_situation": "situazione concreta in cui si trova il PLAYER all'inizio",
+  "opening_narration": "breve apertura narrativa in seconda persona, senza decidere azioni del PLAYER",
   "initial_npcs": [
     {{
       "description": "identità e ruolo di una persona già presente, solo se serve",
@@ -200,7 +201,7 @@ Non inventare azioni o pensieri del giocatore.""",
         "genre": seed.get("genre", ""),
         "tone": seed.get("tone", ""),
         "rules": seed.get("rules", []) if isinstance(seed.get("rules"), list) else [],
-        "opening": str(seed.get("player_situation") or "").strip(),
+        "opening": str(seed.get("opening_narration") or seed.get("player_situation") or "").strip(),
         "started": True,
     }
     extra["story_chat"] = [{"role": "assistant", "content": extra["campaign"]["opening"]}] if extra["campaign"]["opening"] else []
