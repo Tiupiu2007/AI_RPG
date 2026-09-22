@@ -9,7 +9,7 @@ from app.database.characters_db import get_character, save_character
 from app.characters.characters_identity import CharacterIdentity
 from app.characters.characters_languages import get_race_languages
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
-from app.world.runtime import ensure_world
+from app.world.runtime import ensure_world, save_world, add_character_to_location
 from app.world.locations import Location
 
 
@@ -190,6 +190,7 @@ Non inventare azioni o pensieri del giocatore.""",
         "turn": 0,
     }
     location.add_character(str(player_id))
+    save_world(extra)
     extra["characters_present"] = []
     extra["involved_characters"] = []
     extra["world_canon"] = [str(x).strip() for x in seed.get("canon_facts", []) if isinstance(x, str) and x.strip()][:100]
@@ -202,7 +203,7 @@ Non inventare azioni o pensieri del giocatore.""",
         "opening": str(seed.get("player_situation") or "").strip(),
         "started": True,
     }
-    extra["story_chat"] = []
+    extra["story_chat"] = [{"role": "assistant", "content": extra["campaign"]["opening"]}] if extra["campaign"]["opening"] else []
     extra["quests"] = []
     extra.pop("combat_state", None)
     save_character(player["identity"], player["languages"], extra_data=extra, character_id=player_id)
