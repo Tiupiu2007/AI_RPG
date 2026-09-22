@@ -1,83 +1,44 @@
-# AI RPG — TODO / Roadmap
+# AI RPG — Stato del progetto
 
-## Personaggi
-- [ ] Collegare la generazione completa a inventario, denaro e magie.
-- [ ] Salvare e caricare in modo strutturato inventario, denaro e magie nel database.
-- [ ] Separare definitivamente i moduli backend del personaggio per responsabilità.
-- [ ] Gestire equipaggiamento, danni, usura e riparazione.
-- [ ] Gestire apprendimento, evoluzione e padronanza delle magie.
-- [ ] Collegare livello ed esperienza alla progressione reale.
-- [ ] Migliorare la generazione da descrizione libera.
+## Core completato
 
-## Mondo
-- [ ] Implementare World State persistente.
-- [ ] Implementare luoghi a struttura libera e generazione progressiva.
-- [ ] Implementare geografia con coordinate + collegamenti.
-- [ ] Implementare percorsi, distanze e tempi di viaggio deterministici.
-- [ ] Implementare mappa esplorabile e conoscenza separata della mappa.
-- [ ] Implementare biomi e transizioni geografiche coerenti.
-- [ ] Implementare distribuzione dinamica delle razze con territori di maggiore concentrazione.
-- [ ] Implementare popolazione aggregata dinamica per città e insediamenti.
+- [x] Chat narrativa libera senza menu.
+- [x] Player agency separata dal narratore.
+- [x] Pipeline intent AI → Game Engine → Narration AI.
+- [x] Stato autorevole di HP, stamina, mana, inventario, posizione e flag.
+- [x] Validazione delle azioni AI.
+- [x] Memoria persistente con recupero per rilevanza.
+- [x] Fatti canonici persistenti.
+- [x] Eventi persistenti.
+- [x] Relazioni persistenti.
+- [x] Interazioni NPC con memoria e conoscenza separate.
+- [x] Mondo persistente con orologio e cronologia eventi.
+- [x] Luoghi persistenti e scoperta di nuove destinazioni esplicitamente indicate dal PLAYER.
+- [x] Movimento collegato al Game Engine.
+- [x] Combattimento narrativo persistente.
+- [x] Danni, costi, risorse e condizioni calcolati dal combat engine.
+- [x] Persistenza delle conseguenze del combattimento sui personaggi.
+- [x] Reset della storia con stato narrativo e mondo separati.
+- [x] API per stato del personaggio e stato del mondo.
+- [x] Test dei contratti principali del Game Engine.
 
-## Conoscenza e narrativa
-- [ ] Separare verità del mondo, conoscenza dei singoli personaggi, ricordi e convinzioni.
-- [ ] Impedire il metagaming dell'IA nella narrazione.
-- [ ] Implementare eventi autonomi con cause, tempi e conseguenze coerenti.
-- [ ] Rendere il giocatore la principale fonte dei cambiamenti importanti del mondo.
-- [ ] Implementare memoria narrativa persistente e selezione del contesto rilevante.
+## Da completare solo se si vogliono sistemi RPG più profondi
 
-## Sistema di gioco
-- [ ] Integrare tempo globale, calendario e condizioni ambientali.
-- [ ] Integrare economia, commercio e valute.
-- [ ] Integrare combattimento e conseguenze fisiche.
-- [ ] Integrare relazioni e reputazione con il mondo.
-- [ ] Integrare salvataggi completi e caricamento affidabile.
-- [ ] Aggiungere controlli di consistenza del game engine prima delle modifiche persistenti.
+Questi elementi non sono necessari per il nucleo conversazionale persistente, ma possono essere aggiunti in seguito senza cambiare l'architettura:
 
-## IA
-- [ ] Ridurre al minimo i compiti deterministici affidati all'IA.
-- [ ] Separare narratore, interprete dei personaggi e motore del mondo.
-- [ ] Definire prompt/context builder separati per ogni responsabilità.
-- [ ] Validare sempre le azioni prodotte dall'IA.
-- [ ] Gestire errori, output non validi e recupero senza rompere lo stato del mondo.
+- [ ] Sistema quest strutturato con obiettivi, ricompense e stati.
+- [ ] Economia e commercio realmente collegati alle azioni narrative.
+- [ ] Equipaggiamento con statistiche, usura e riparazione.
+- [ ] Progressione esperienza/livello.
+- [ ] Sistema di reputazione/fazioni collegato agli eventi.
+- [ ] Simulazione autonoma avanzata degli NPC fuori scena.
+- [ ] Mappa grafica.
+- [ ] UI avanzata per inventario, statistiche, relazioni e mondo.
+- [ ] Packaging standalone/Steam con provider AI integrato.
+- [ ] Test end-to-end con un'istanza reale di Ollama.
 
-## Interfaccia
-- [ ] Rifinire completamente lo stile generale.
-- [ ] Migliorare pannello personaggio e inventario.
-- [ ] Creare una schermata mappa.
-- [ ] Creare visualizzazione delle magie per categoria.
-- [ ] Migliorare ricerca e gestione dei personaggi.
-- [ ] Aggiungere indicatori di stato, livello, denaro ed equipaggiamento.
-- [ ] Rendere l'interfaccia responsive e coerente tra le sezioni.
+## Regola architetturale
 
-## Test e stabilità
-- [ ] Test automatici per database personaggi.
-- [ ] Test automatici per inventario e denaro.
-- [ ] Test automatici per magie.
-- [ ] Test automatici per movimento e tempo.
-- [ ] Test per salvataggio/caricamento.
-- [ ] Test per coerenza della conoscenza dei personaggi.
-- [ ] Test end-to-end generazione → salvataggio → caricamento → modifica.
+L'AI interpreta e racconta. Il Game Engine decide cosa è realmente successo. La memoria e il World State conservano ciò che deve continuare a essere vero.
 
-## Ordine consigliato
-1. Stabilizzare personaggi + database.
-2. Completare inventario/denaro/magie.
-3. Costruire World State e geografia.
-4. Costruire tempo e movimento.
-5. Costruire conoscenza/memoria.
-6. Integrare eventi autonomi.
-7. Integrare narrativa IA.
-8. Rifinire interfaccia e mappa.
-9. Test completi e ottimizzazione.
-
-
-1. Relazioni persistenti
-2. Evoluzione delle relazioni
-3. Memoria intelligente
-4. Stato del mondo
-5. Personaggi presenti/ascolto
-6. Eventi e conseguenze
-7. Sistema di tempo
-8. Sistema di luoghi
-9. Sistema di obiettivi
-10. Rifinitura del comportamento AI
+Il mondo può essere creativo. Il personaggio del PLAYER non viene inventato dall'AI.
