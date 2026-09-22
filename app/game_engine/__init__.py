@@ -242,6 +242,26 @@ def validate_action(extra: dict, action: dict) -> dict:
             return {"valid": False, "reason": "Movimento senza destinazione.", "action": normalized}
         if target_id is not None and available and target_id not in available:
             return {"valid": False, "reason": "La destinazione non è disponibile.", "action": normalized}
+        if not target_id and target_text:
+            # Il testo è ammesso solo per cercare una destinazione già presente
+            # nel mondo: il narratore non può creare luoghi dal nulla tramite
+            # un semplice intent.
+            from app.world.runtime import resolve_existing_location
+            if resolve_existing_location(extra, target_text) is None:
+                return {"valid": False, "reason": "La destinazione non esiste nel mondo conosciuto.", "action": normalized}
+
+    if action_type == "talk":
+        present = extra.get("characters_present", [])
+        present_ids = set()
+        if isinstance(present, list):
+            for item in present:
+                candidate = item.get("id", item.get("character_id")) if isinstance(item, dict) else item
+                if isinstance(candidate, int) and not isinstance(candidate, bool):
+                    present_ids.add(candidate)
+        if not isinstance(target_id, int) or isinstance(target_id, bool):
+            return {"valid": False, "reason": "Parlare richiede il target_id dell'NPC.", "action": normalized}
+        if target_id not in present_ids:
+            return {"valid": False, "reason": "L'NPC non è presente nella scena.", "action": normalized}
 
     if action_type == "use_item":
         item_id = target_id if target_id is not None else target_text
@@ -442,8 +462,20 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                 }
             changes["combat"] = combat_result
 
-    # inspect, interact e talk sono azioni narrative: non modificano numeri
-    # da sole, ma il risultato viene passato al narratore.
+    # Le interazioni sociali vengono applicate solo dopo che l'engine ha
+    # confermato che il target è reale e presente.
+    if action_type == "talk":
+        target_id = action.get("target_id")
+        if isinstance(target_id, int) and isinstance(parameters.get("social_effects"), dict):
+            from app.game_engine.narrative_effects import apply_social_effects
+            social = apply_social_effects(
+                actor_id=actor_id if isinstance(actor_id, int) else 0,
+                target_id=target_id,
+                effects=parameters["social_effects"],
+                extra=extra,
+            )
+            changes["social"] = social
+
     return {
         "executed": True,
         "valid": True,
