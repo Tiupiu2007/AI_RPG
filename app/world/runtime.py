@@ -128,6 +128,19 @@ def move_actor(extra: dict[str, Any], actor_id: int, target_id: str | None = Non
     _repository.save(world)
     return {"from": previous, "to": target.location_id, "name": target.name}
 
+def add_character_to_location(extra: dict[str, Any], character_id: int, location_id: str | None = None) -> None:
+    world = ensure_world(extra)
+    location_id = location_id or extra.get("game_state", {}).get("location")
+    if location_id is None:
+        return
+    location = world.get_location(str(location_id))
+    if location is None:
+        return
+    location.add_character(str(character_id))
+    world.update()
+    _repository.save(world)
+
+
 def get_world_context(extra: dict[str, Any]) -> dict[str, Any]:
     world = ensure_world(extra)
     current_id = None
