@@ -28,6 +28,7 @@ from app.database.characters_db import (
 from app.memory.memory import reset_character_history
 from app.story_chat import get_story_history, reset_story_history, story_turn
 from app.game_engine import ensure_game_state, snapshot
+from app.world.runtime import get_world_context
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -264,6 +265,17 @@ class RPGServer(BaseHTTPRequestHandler):
                     extra = {}
                 ensure_game_state(extra)
                 json_response(self, snapshot(extra))
+                return
+            if request_path.startswith("/api/world-state/"):
+                character_id = int(request_path.rsplit("/", 1)[1])
+                character = get_character(character_id)
+                if character is None:
+                    json_response(self, {"error": "Personaggio non trovato."}, 404)
+                    return
+                extra = character.get("extra", {})
+                if not isinstance(extra, dict):
+                    extra = {}
+                json_response(self, get_world_context(extra))
                 return
             if request_path == "/api/ai-status":
                 provider_path = Path(__file__).resolve().parent / "app" / "ai_provider.py"
