@@ -21,11 +21,13 @@ def _preview(value: Any, limit: int = MAX_ERROR_PREVIEW) -> str:
     return text if len(text) <= limit else f"{text[:limit]}..."
 
 
-def ask_ollama(system_prompt: str, user_prompt: str) -> str:
+def ask_ollama(system_prompt: str, user_prompt: str, *, temperature: float | None = None) -> str:
     if not isinstance(system_prompt, str) or not system_prompt.strip():
         raise ValueError("system_prompt non può essere vuoto.")
     if not isinstance(user_prompt, str) or not user_prompt.strip():
         raise ValueError("user_prompt non può essere vuoto.")
+
+    selected_temperature = TEMPERATURE if temperature is None else max(0.0, min(float(temperature), 2.0))
 
     payload = {
         "model": MODEL_NAME,
@@ -36,7 +38,7 @@ def ask_ollama(system_prompt: str, user_prompt: str) -> str:
         "stream": False,
         "format": "json",
         "think": False,
-        "options": {"temperature": TEMPERATURE, "num_ctx": NUM_CTX},
+        "options": {"temperature": selected_temperature, "num_ctx": NUM_CTX},
     }
 
     try:
