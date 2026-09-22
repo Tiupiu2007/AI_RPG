@@ -83,6 +83,7 @@ def snapshot(extra: dict) -> dict:
         "abilities": deepcopy(extra.get("abilities", [])),
         "skills": deepcopy(extra.get("skills", [])),
         "magic": deepcopy(extra.get("magic", {})),
+        "combat": deepcopy(extra.get("combat_state")) if isinstance(extra.get("combat_state"), dict) else None,
     }
 
 
