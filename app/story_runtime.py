@@ -167,11 +167,7 @@ Non inventare azioni o pensieri del giocatore.""",
     if not isinstance(seed, dict):
         raise ValueError("La base della storia deve essere un oggetto JSON.")
 
-    world = ensure_world({
-        "world_name": seed.get("world_name") or "Mondo principale",
-        "world_description": seed.get("world_description") or "",
-    })
-    # ensure_world needs the real player extra to persist world_id.
+    # Il mondo della campagna appartiene al personaggio giocatore e viene riutilizzato da tutti i turni successivi.
     world = ensure_world(extra)
     world.name = str(seed.get("world_name") or world.name).strip() or world.name
     world.description = str(seed.get("world_description") or "").strip()
@@ -212,12 +208,22 @@ Non inventare azioni o pensieri del giocatore.""",
     save_character(player["identity"], player["languages"], extra_data=extra, character_id=player_id)
     # Initial NPCs are generated lazily by the narrative system. The seed only records
     # the descriptions that justify their existence; no NPC is created unnecessarily.
-    extra["pending_npcs"] = [
+    pending = [
         item for item in seed.get("initial_npcs", [])
         if isinstance(item, dict) and isinstance(item.get("description"), str) and item["description"].strip()
     ][:6]
+    extra["pending_npcs"] = []
     save_character(player["identity"], player["languages"], extra_data=extra, character_id=player_id)
-    return {"player_id": player_id, "campaign": extra["campaign"], "world": {"id": world.world_id, "name": world.name, "description": world.description}, "starting_location": location.to_dict(), "opening": extra["campaign"]["opening"], "canon_facts": extra["world_canon"], "pending_npcs": extra["pending_npcs"]}
+
+    from app.npc_runtime import create_npc_from_description
+    created_npcs = []
+    for item in pending:
+        try:
+            created_npcs.append(create_npc_from_description(player_id, item["description"], role=item.get("role", "npc")))
+        except Exception:
+            continue
+
+    return {"player_id": player_id, "campaign": extra["campaign"], "world": {"id": world.world_id, "name": world.name, "description": world.description}, "starting_location": location.to_dict(), "opening": extra["campaign"]["opening"], "canon_facts": extra["world_canon"], "npcs": created_npcs}
 
 
 def get_story_setup(player_id: int) -> dict:
