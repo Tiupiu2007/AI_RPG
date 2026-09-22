@@ -250,6 +250,13 @@ def validate_action(extra: dict, action: dict) -> dict:
         if _find_inventory_quantity(extra, str(item_id)) < quantity:
             return {"valid": False, "reason": "L'oggetto non è presente nell'inventario in quantità sufficiente.", "action": normalized}
 
+    if action_type in {"attack", "defend", "cast_magic", "flee"}:
+        if action_type in {"attack", "cast_magic"}:
+            if not isinstance(target_id, int) or isinstance(target_id, bool):
+                return {"valid": False, "reason": "Il combattimento richiede un target_id numerico.", "action": normalized}
+        if action_type in {"defend", "flee"} and isinstance(extra.get("combat_state"), dict) is False:
+            return {"valid": False, "reason": "Questa azione richiede un combattimento attivo.", "action": normalized}
+
     if action_type == "cast_magic":
         ability_id = target_id if target_id is not None else parameters.get("ability_id")
         abilities = extra.get("abilities", [])
