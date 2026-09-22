@@ -524,3 +524,20 @@ Restano attività di prodotto, non correzioni concettuali del sistema narrativo:
 - test end-to-end su una storia lunga;
 - bilanciamento delle regole di combattimento, magia ed economia;
 - contenuti iniziali del mondo.
+
+
+## Architettura campagna e protagonista persistente
+
+La storia non parte più scegliendo un personaggio usa-e-getta. Il progetto ora distingue il **PLAYER**, che possiede un protagonista persistente, dalla popolazione del mondo.
+
+- Il protagonista è marcato con `player_character: true`.
+- Statistiche, abilità, inventario, relazioni, memoria e progressione del protagonista non vengono azzerati quando si avvia una nuova campagna.
+- Una nuova campagna viene generata da una breve premessa scritta dal giocatore oppure da una richiesta vuota, nel qual caso l'IA genera autonomamente il punto di partenza.
+- L'IA genera una **base di partenza**, non una storia completa: mondo, regole già note, luogo iniziale, situazione del protagonista, eventuali NPC iniziali e fatti canonici.
+- Il mondo persistente viene creato nel database dei mondi e il luogo iniziale viene realmente registrato nel WorldState.
+- Gli NPC importanti vengono materializzati come personaggi persistenti con un proprio ID, identità, personalità, statistiche, memoria, relazioni e stato.
+- Durante la storia il narratore può proporre nuovi NPC tramite `npc_creations`; il runtime li trasforma in personaggi reali invece di lasciarli come testo temporaneo.
+- La chat non presenta più una selezione di personaggi come punto di ingresso: il protagonista è separato dagli NPC e la UI guida prima alla creazione del protagonista e poi alla creazione della campagna.
+- `Nuova storia` resetta il contenitore della campagna, non la vita del protagonista.
+
+Questo mantiene la regola architetturale: **il giocatore controlla il protagonista; il mondo appartiene al narratore; lo stato autorevole appartiene al game engine.**
