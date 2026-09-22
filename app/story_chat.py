@@ -438,6 +438,24 @@ def _parse_npc_updates(value) -> list[dict]:
     return result
 
 
+def _parse_npc_creations(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[:4]:
+        if not isinstance(item, dict):
+            continue
+        description = item.get("description")
+        if not isinstance(description, str) or not description.strip():
+            continue
+        role = item.get("role", "npc")
+        result.append({
+            "description": " ".join(description.strip().split())[:1000],
+            "role": " ".join(str(role).strip().split())[:100],
+        })
+    return result
+
+
 def _parse_canon_facts(value) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -670,6 +688,16 @@ def story_turn(character_id: int, player_message: str):
 
     canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
     npc_updates = _parse_npc_updates(narration_result.get("npc_updates"))
+    npc_creations = _parse_npc_creations(narration_result.get("npc_creations"))
+    created_npcs = []
+    if npc_creations:
+        from app.npc_runtime import create_npc_from_description
+        for proposal in npc_creations:
+            try:
+                created_npcs.append(create_npc_from_description(character_id, proposal["description"], role=proposal["role"]))
+            except (ValueError, TypeError):
+                continue
+
     raw_quest_updates = narration_result.get("quest_updates")
     quest_updates = raw_quest_updates if isinstance(raw_quest_updates, list) else []
     quest_results = apply_quest_updates(
@@ -762,6 +790,7 @@ def story_turn(character_id: int, player_message: str):
             "npc_updates": npc_updates,
             "social_results": social_results,
             "quest_results": quest_results,
+            "created_npcs": created_npcs,
             "explicit_memory_id": memory_id,
             "world_event_id": world_event_id,
         },
@@ -795,6 +824,7 @@ def story_turn(character_id: int, player_message: str):
         "npc_updates": npc_updates,
         "social_results": social_results,
         "quest_results": quest_results,
+        "created_npcs": created_npcs,
         "action": action,
         "engine_result": engine_result,
     }
