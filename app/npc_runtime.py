@@ -6,7 +6,7 @@ from app.database.characters_db import get_character, save_character
 from app.characters.character_from_description import generate_character_from_description
 from app.characters.characters_languages import get_race_languages
 from app.characters.characters_profile import generate_character_profile, profile_to_dict
-from app.world.runtime import ensure_world
+from app.world.runtime import ensure_world, add_character_to_location
 
 
 def create_npc_from_description(player_id: int, description: str, *, role: str = "npc") -> dict:
@@ -46,10 +46,7 @@ def create_npc_from_description(player_id: int, description: str, *, role: str =
     npc_id = save_character(identity, get_race_languages(identity.race), extra_data=npc_extra)
     world = ensure_world(extra)
     location_id = extra.get("game_state", {}).get("location")
-    if location_id and location_id in world.locations:
-        world.locations[location_id].add_character(str(npc_id))
-        from app.world.world_repository import WorldRepository
-        # ensure_world's repository is private; record presence through player extra.
+    add_character_to_location(extra, npc_id, location_id)
     present = extra.get("characters_present", [])
     if not isinstance(present, list):
         present = []
