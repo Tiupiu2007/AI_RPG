@@ -7,7 +7,7 @@ from app.ai_provider import ask_ollama
 from app.game_engine import advance_turn, ensure_game_state, snapshot, execute_action
 from app.database.characters_db import get_character, save_character
 from app.relationships.relationships import get_character_relationships
-from app.world.runtime import advance_world, get_world_context, record_world_event
+from app.world.runtime import advance_world, get_world_context, record_world_event, reachable_location_ids
 from app.memory.memory import (
     create_event,
     create_memory,
@@ -179,7 +179,7 @@ def _build_context(character: dict, query: str = "") -> dict:
             **world,
             "characters_present": present_characters,
             "involved_characters": extra.get("involved_characters", []),
-            "available_location_ids": extra.get("available_location_ids", []),
+            "available_location_ids": reachable_location_ids(extra),
             "current_location": extra.get("game_state", {}).get("location"),
         },
         "relationships": get_character_relationships(character["id"]),
