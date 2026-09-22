@@ -7,6 +7,7 @@ from app.ai_provider import ask_ollama
 from app.game_engine import advance_turn, ensure_game_state, snapshot, execute_action
 from app.database.characters_db import get_character, save_character
 from app.relationships.relationships import get_character_relationships
+from app.world.runtime import advance_world, get_world_context, record_world_event
 from app.memory.memory import (
     create_event,
     create_memory,
@@ -95,11 +96,46 @@ def _explicit_memory(player_message: str, character_name: str) -> str | None:
     return f"Il PLAYER ha chiesto di ricordare: {fact}"
 
 
+def _present_characters(extra: dict, player_id: int) -> list[dict]:
+    raw = extra.get("characters_present", [])
+    if not isinstance(raw, list):
+        raw = []
+    result = []
+    seen = set()
+    for item in raw:
+        candidate = item.get("id", item.get("character_id")) if isinstance(item, dict) else item
+        if not isinstance(candidate, int) or isinstance(candidate, bool) or candidate == player_id or candidate in seen:
+            continue
+        npc = get_character(candidate)
+        if npc is None:
+            continue
+        seen.add(candidate)
+        identity = npc["identity"]
+        npc_extra = npc.get("extra", {}) if isinstance(npc.get("extra", {}), dict) else {}
+        result.append({
+            "id": candidate,
+            "name": identity.name,
+            "surname": identity.surname,
+            "nickname": identity.nickname,
+            "age": identity.age,
+            "sex": identity.sex,
+            "race": identity.race,
+            "physical_description": identity.physical_description,
+            "appearance": identity.appearance,
+            "personality": npc_extra.get("personality", {}),
+            "state": npc_extra.get("state", {}),
+        })
+    return result
+
+
 def _build_context(character: dict, query: str = "") -> dict:
     identity = character["identity"]
     extra = character.get("extra", {})
     if not isinstance(extra, dict):
         extra = {}
+
+    world = get_world_context(extra)
+    present_characters = _present_characters(extra, character["id"])
 
     return {
         "player": {
@@ -124,9 +160,11 @@ def _build_context(character: dict, query: str = "") -> dict:
         "inventory": extra.get("inventory", {}),
         "magic": extra.get("magic", {}),
         "world": {
-            "characters_present": extra.get("characters_present", []),
+            **world,
+            "characters_present": present_characters,
             "involved_characters": extra.get("involved_characters", []),
             "available_location_ids": extra.get("available_location_ids", []),
+            "current_location": extra.get("game_state", {}).get("location"),
         },
         "relationships": get_character_relationships(character["id"]),
         "memories": get_relevant_memories(
@@ -419,6 +457,7 @@ def story_turn(character_id: int, player_message: str):
 
     ensure_game_state(extra)
     advance_turn(extra)
+    world_tick = advance_world(extra, 1)
     history = _clean_history(extra)
 
     # PASSO 1: l'AI interpreta l'intento. In questa fase non produciamo ancora
@@ -454,6 +493,7 @@ def story_turn(character_id: int, player_message: str):
 
     # PASSO 2: il Game Engine decide cosa è realmente successo.
     engine_result = execute_action(extra, action, actor_id=character_id)
+    engine_result["world_time"] = world_tick
 
     if engine_result.get("valid", False):
         action = engine_result.get("action", action)
@@ -536,6 +576,17 @@ def story_turn(character_id: int, player_message: str):
     )[-MAX_HISTORY:]
     extra["story_chat"] = history
 
+    world_event_id = record_world_event(
+        extra,
+        "story_turn",
+        {
+            "character_id": character_id,
+            "player_message": message,
+            "action": action,
+            "engine_result": engine_result,
+        },
+    )
+
     event_id = create_event(
         character_id,
         "story_turn",
@@ -546,6 +597,7 @@ def story_turn(character_id: int, player_message: str):
             "engine_result": engine_result,
             "canon_facts": canon_facts,
             "explicit_memory_id": memory_id,
+            "world_event_id": world_event_id,
         },
     )
 
