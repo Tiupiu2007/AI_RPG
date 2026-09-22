@@ -8,7 +8,7 @@ from app.database.characters_db import get_character, save_character
 from app.game_engine.action_executor import execute_actions
 from app.game_engine.action_validator import validate_actions
 from app.memory.context import build_continuity_facts
-from app.memory.memory import create_event, get_character_memories, get_recent_events
+from app.memory.memory import create_event, get_character_memories, get_recent_events, get_relevant_memories
 from app.relationships.relationships import ensure_relationship, get_character_relationships
 
 
@@ -168,6 +168,17 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
 
     conversation = get_character_conversation(character_id)
     context = build_character_context(character_id)
+    # Per una conversazione lunga, recupera anche memorie vecchie pertinenti
+    # all'argomento corrente invece di affidarsi solo alla recency.
+    context["memories"] = [
+        m for m in get_relevant_memories(
+            character_id,
+            original_player_input,
+            limit=20,
+            include_secrets=True,
+        )
+        if isinstance(m, dict) and m.get("character_id") == character_id
+    ]
     if context.get("context_scope", {}).get("character_id") != character_id: raise ValueError("Contesto personaggio incoerente.")
     if any(m.get("character_id") != character_id for m in context.get("memories", [])): raise ValueError("Il contesto contiene una memoria appartenente a un altro personaggio.")
     if any(e.get("character_id") != character_id for e in context.get("recent_events", [])): raise ValueError("Il contesto contiene un evento appartenente a un altro personaggio.")
