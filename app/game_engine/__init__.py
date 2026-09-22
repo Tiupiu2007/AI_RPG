@@ -251,14 +251,20 @@ def validate_action(extra: dict, action: dict) -> dict:
             return {"valid": False, "reason": "L'oggetto non è presente nell'inventario in quantità sufficiente.", "action": normalized}
 
     if action_type in {"attack", "defend", "cast_magic", "flee"}:
-        if action_type in {"attack", "cast_magic"}:
+        if action_type == "attack" and (
+            not isinstance(target_id, int) or isinstance(target_id, bool)
+        ):
+            return {"valid": False, "reason": "L'attacco richiede un target_id numerico.", "action": normalized}
+        if action_type == "cast_magic" and isinstance(extra.get("combat_state"), dict):
             if not isinstance(target_id, int) or isinstance(target_id, bool):
-                return {"valid": False, "reason": "Il combattimento richiede un target_id numerico.", "action": normalized}
-        if action_type in {"defend", "flee"} and isinstance(extra.get("combat_state"), dict) is False:
+                return {"valid": False, "reason": "La magia in combattimento richiede un target_id numerico.", "action": normalized}
+        if action_type in {"defend", "flee"} and not isinstance(extra.get("combat_state"), dict):
             return {"valid": False, "reason": "Questa azione richiede un combattimento attivo.", "action": normalized}
 
     if action_type == "cast_magic":
-        ability_id = target_id if target_id is not None else parameters.get("ability_id")
+        ability_id = parameters.get("ability_id")
+        if ability_id is None and target_id is not None and not isinstance(extra.get("combat_state"), dict):
+            ability_id = target_id
         abilities = extra.get("abilities", [])
         magic = extra.get("magic", {})
         known = set()
