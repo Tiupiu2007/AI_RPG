@@ -114,6 +114,8 @@ Richiesta di partenza del giocatore:
 {request or "(nessuna: inventa tu una situazione iniziale coerente e concreta)"}
 
 Genera SOLO una BASE DI PARTENZA, non una storia completa.
+La base deve però essere LEGGIBILE dal giocatore: deve spiegare brevemente che mondo è, qual è il suo contesto
+e chi è il protagonista, così il giocatore capisce dove si trova e cosa sta iniziando.
 Il mondo deve essere sufficientemente definito da permettere il primo turno, ma il resto
 deve rimanere aperto alla scoperta. Non creare un protagonista speciale senza motivo.
 Non creare profezie o misteri automaticamente. Non decidere azioni, pensieri o emozioni del PLAYER.
@@ -121,7 +123,8 @@ Non creare profezie o misteri automaticamente. Non decidere azioni, pensieri o e
 Restituisci JSON:
 {{
   "world_name": "nome",
-  "world_description": "breve descrizione delle regole/ambientazione già stabilite",
+  "world_description": "descrizione leggibile e comprensibile del mondo, sufficiente per capire dove si trova il giocatore",
+  "world_lore": "breve introduzione narrativa al mondo: situazione storica/sociale/politica o contesto generale già vero all'inizio",
   "genre": "string",
   "tone": "string",
   "rules": ["regole concrete del mondo"],
@@ -131,7 +134,8 @@ Restituisci JSON:
     "description": "ciò che è realmente presente all'inizio"
   }},
   "player_situation": "situazione concreta in cui si trova il PLAYER all'inizio",
-  "opening_narration": "breve apertura narrativa in seconda persona, senza decidere azioni del PLAYER",
+  "opening_narration": "breve apertura narrativa in seconda persona, senza decidere azioni del PLAYER e senza attribuirgli conoscenze non acquisite",
+  "player_intro": "breve descrizione del protagonista visibile/nota: aspetto, razza, età e caratteristiche già definite",
   "initial_npcs": [
     {{
       "description": "identità e ruolo di una persona già presente, solo se serve",
@@ -202,6 +206,8 @@ Non inventare azioni o pensieri del giocatore.""",
         "tone": seed.get("tone", ""),
         "rules": seed.get("rules", []) if isinstance(seed.get("rules"), list) else [],
         "opening": str(seed.get("opening_narration") or seed.get("player_situation") or "").strip(),
+        "player_intro": str(seed.get("player_intro") or "").strip(),
+        "world_lore": str(seed.get("world_lore") or "").strip(),
         "started": True,
     }
     extra["story_chat"] = [{"role": "assistant", "content": extra["campaign"]["opening"]}] if extra["campaign"]["opening"] else []
