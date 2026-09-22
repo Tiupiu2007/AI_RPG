@@ -57,10 +57,9 @@ def reset_story_history(character_id: int):
     if not isinstance(extra, dict):
         extra = {}
 
-    # Una nuova storia deve davvero ripartire pulita: elimina eventi, memorie
-    # e stato narrativo della storia precedente, mantenendo il personaggio e
-    # le relazioni sociali persistenti.
-    reset_character_history(character_id, clear_relationships=False)
+    # Una nuova campagna NON resetta il personaggio. Statistiche, abilità,
+    # inventario, relazioni e memorie restano parte della sua vita.
+    # Si azzera solo il contenitore della campagna narrativa.
     character = get_character(character_id)
     if character is None:
         raise ValueError(f"Personaggio con ID {character_id} non trovato.")
@@ -70,9 +69,15 @@ def reset_story_history(character_id: int):
     extra.pop("story_chat", None)
     extra.pop("world_canon", None)
     extra.pop("world_id", None)
+    extra.pop("world_name", None)
+    extra.pop("world_description", None)
     extra.pop("combat_state", None)
     extra.pop("game_state", None)
     extra.pop("quests", None)
+    extra.pop("campaign", None)
+    extra.pop("characters_present", None)
+    extra.pop("involved_characters", None)
+    extra.pop("pending_npcs", None)
     save_character(character["identity"], character["languages"], extra_data=extra, character_id=character_id)
 
 
@@ -136,12 +141,6 @@ def _present_characters(extra: dict, player_id: int, query: str) -> list[dict]:
                 ),
                 None,
             ),
-            "private_memories": get_relevant_memories(
-                candidate,
-                query,
-                limit=8,
-                include_secrets=True,
-            ),
         })
     return result
 
@@ -193,6 +192,7 @@ def _build_context(character: dict, query: str = "") -> dict:
         ) if query.strip() else get_character_memories(character["id"], limit=MAX_MEMORIES, include_secrets=True),
         "recent_events": get_recent_events(character["id"], limit=MAX_EVENTS),
         "world_canon": extra.get("world_canon", []) if isinstance(extra.get("world_canon"), list) else [],
+        "campaign": extra.get("campaign") if isinstance(extra.get("campaign"), dict) else None,
         "quests": active_quests(extra),
     }
 
@@ -314,12 +314,27 @@ Se il PLAYER tenta qualcosa di rischioso, non garantire il successo.
 Descrivi l'esito in modo plausibile e coerente con contesto, capacità, situazione e conseguenze già stabilite.
 Non regalare successi automatici e non forzare fallimenti senza motivo.
 
+MONDO DINAMICO E NPC
+Gli NPC sono persone persistenti, non comparse usa-e-getta.
+Quando un NPC è già nel CONTEXT, mantieni la sua identità, storia, relazioni e stato.
+Non creare una seconda persona con lo stesso ruolo solo perché serve una risposta.
+Puoi introdurre una nuova persona quando la situazione la rende plausibile (per esempio un cliente,
+un passante, una guardia o un collega), ma non trattarla come persistente finché non viene materializzata dal sistema.
+Gli NPC possono avere obiettivi propri e reagire anche senza che il PLAYER li comandi.
+Il fatto che un NPC non sia presente nella scena non significa che sia immobile o congelato nel mondo.
+Il tempo può far evolvere il mondo, ma ogni evoluzione deve essere coerente con le informazioni già stabilite.
+Non dare al PLAYER accesso a pensieri o ricordi privati di un NPC: può conoscere solo ciò che l'NPC dice,
+fa o che può ragionevolmente osservare.
+Non generare una folla di NPC solo per rendere la scena viva: usa solo le persone plausibili e utili alla situazione.
+
 INFORMAZIONI NON CONOSCIUTE
 Se un NPC non conosce qualcosa, non può saperla perché tu, come modello, la conosci.
 Distingui sempre ciò che il PLAYER sa da ciò che il mondo/NPC sa.
 Le informazioni possono essere scoperte durante la storia, ma una scoperta successiva non deve contraddire quanto già narrato.
 
 MEMORIA
+La CAMPAGNA è la base persistente della storia corrente. Non trattarla come un copione chiuso: è il punto di partenza dal quale il mondo può evolvere.
+Se non esiste una campagna attiva, non inventare una situazione iniziale: il server deve prima crearla.
 Il CONTEXT contiene una selezione di memorie pertinenti all'ultimo messaggio, non necessariamente le più recenti.
 Usa quelle memorie per mantenere continuità quando un argomento, una persona, un luogo o un evento ritorna dopo molti turni.
 Non presumere che una memoria non presente nella selezione sia falsa: semplicemente non è stata recuperata per questo turno.
@@ -571,6 +586,9 @@ def story_turn(character_id: int, player_message: str):
 
     # PASSO 1: l'AI interpreta l'intento. In questa fase non produciamo ancora
     # la narrazione mostrata al giocatore.
+    campaign = extra.get("campaign")
+    if not isinstance(campaign, dict) or not campaign.get("started"):
+        raise ValueError("Nessuna storia attiva. Crea prima una nuova storia dalla schermata di avvio.")
     context = _build_context(character, message)
     intent_prompt = _build_system_prompt(context, history)
     raw_intent = ask_ollama(
