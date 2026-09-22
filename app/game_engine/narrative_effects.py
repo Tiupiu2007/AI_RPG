@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.database.characters_db import get_character, save_character
-from app.memory.memory import create_memory
+from app.memory.memory import create_event, create_memory
 from app.relationships.relationships import change_relationship
 
 SOCIAL_FIELDS = ("trust", "affection", "respect", "hostility")
@@ -75,6 +75,20 @@ def apply_social_effects(
     relationship = change_relationship(actor_id, target_id, **deltas) if deltas else None
     npc_state = _update_npc_state(target_id, effects)
 
+    npc_event_id = create_event(
+        target_id,
+        "npc_reaction",
+        {
+            "actor_id": actor_id,
+            "relationship": relationship,
+            "state": {
+                key: npc_state.get(key)
+                for key in ("emotion", "thought", "intention", "goal")
+                if npc_state.get(key) is not None
+            },
+        },
+    )
+
     memory_id = None
     memory = effects.get("memory")
     if isinstance(memory, dict):
@@ -88,10 +102,12 @@ def apply_social_effects(
                     memory_type="evento_importante",
                     importance=importance,
                     secret=False,
+                    source_event_id=npc_event_id,
                 )
 
     return {
         "target_id": target_id,
+        "npc_event_id": npc_event_id,
         "relationship": relationship,
         "npc_state": npc_state,
         "memory_id": memory_id,
