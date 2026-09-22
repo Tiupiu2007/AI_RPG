@@ -198,7 +198,7 @@ def remove_item(extra: dict, item_id: str, quantity: int = 1) -> bool:
 
 SUPPORTED_ACTION_TYPES = {
     "none", "move", "inspect", "interact", "use_item",
-    "cast_magic", "attack", "defend", "talk",
+    "cast_magic", "attack", "defend", "talk", "flee",
 }
 
 
@@ -279,7 +279,7 @@ def validate_action(extra: dict, action: dict) -> dict:
     return {"valid": True, "reason": None, "action": normalized}
 
 
-def execute_action(extra: dict, action: dict) -> dict:
+def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> dict:
     """Esegue solo modifiche autorizzate dal Game Engine."""
     validation = validate_action(extra, action)
     if not validation["valid"]:
@@ -308,9 +308,38 @@ def execute_action(extra: dict, action: dict) -> dict:
         remove_item(extra, item_id, quantity)
         changes["inventory"] = {"removed": {item_id: quantity}}
 
-    # inspect, interact, attack, defend, talk e cast_magic non modificano ancora
-    # risorse da soli: il motore non possiede ancora le regole necessarie per farlo
-    # in modo affidabile. Meglio non inventare costi o danni.
+    elif action_type in {"attack", "defend", "cast_magic", "flee"}:
+        if not isinstance(actor_id, int) or isinstance(actor_id, bool):
+            return {
+                "executed": False,
+                "valid": False,
+                "reason": "Il Game Engine non conosce il combattente che esegue l'azione.",
+                "action": action,
+                "changes": {},
+            }
+        if action_type == "flee" and not isinstance(extra.get("combat_state"), dict):
+            return {
+                "executed": False,
+                "valid": False,
+                "reason": "Non sei in combattimento.",
+                "action": action,
+                "changes": {},
+            }
+        try:
+            from app.game_engine.combat_runtime import resolve_narrative_combat
+            combat_result = resolve_narrative_combat(extra, actor_id, action)
+        except (ValueError, TypeError) as error:
+            return {
+                "executed": False,
+                "valid": False,
+                "reason": str(error),
+                "action": action,
+                "changes": {},
+            }
+        changes["combat"] = combat_result
+
+    # inspect, interact e talk sono azioni narrative: non modificano numeri
+    # da sole, ma il risultato viene passato al narratore.
     return {
         "executed": True,
         "valid": True,
