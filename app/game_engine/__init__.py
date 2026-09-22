@@ -357,7 +357,10 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                 "action": action,
                 "changes": {},
             }
-        if action_type == "flee" and not isinstance(extra.get("combat_state"), dict):
+
+        in_combat = isinstance(extra.get("combat_state"), dict)
+
+        if action_type == "flee" and not in_combat:
             return {
                 "executed": False,
                 "valid": False,
@@ -366,9 +369,7 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                 "changes": {},
             }
 
-        # La magia fuori dal combattimento usa solo definizioni già presenti
-        # nello stato del personaggio; non inventiamo costi o poteri.
-        if action_type == "cast_magic" and not isinstance(extra.get("combat_state"), dict):
+        if action_type == "cast_magic" and not in_combat:
             ability_id = parameters.get("ability_id", action.get("target_id"))
             definitions = []
             abilities = extra.get("abilities", [])
@@ -379,6 +380,7 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                 spells = magic.get("spells", magic.get("abilities", []))
                 if isinstance(spells, list):
                     definitions.extend(x for x in spells if isinstance(x, dict))
+
             ability = next(
                 (
                     item for item in definitions
@@ -394,6 +396,7 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                     "action": action,
                     "changes": {},
                 }
+
             mana_cost = max(0, _number(ability.get("mana_cost"), 0))
             if not spend_resource(extra, "mana", mana_cost):
                 return {
@@ -403,24 +406,25 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                     "action": action,
                     "changes": {},
                 }
+
             changes["magic"] = {
                 "ability_id": ability_id,
                 "mana_cost": mana_cost,
                 "remaining_mana": extra["conditions"]["mana"],
             }
-        elif action_type in {"attack", "defend", "flee"} or isinstance(extra.get("combat_state"), dict):
+        else:
             try:
                 from app.game_engine.combat_runtime import resolve_narrative_combat
                 combat_result = resolve_narrative_combat(extra, actor_id, action)
             except (ValueError, TypeError) as error:
-            return {
-                "executed": False,
-                "valid": False,
-                "reason": str(error),
-                "action": action,
-                "changes": {},
-            }
-        changes["combat"] = combat_result
+                return {
+                    "executed": False,
+                    "valid": False,
+                    "reason": str(error),
+                    "action": action,
+                    "changes": {},
+                }
+            changes["combat"] = combat_result
 
     # inspect, interact e talk sono azioni narrative: non modificano numeri
     # da sole, ma il risultato viene passato al narratore.
