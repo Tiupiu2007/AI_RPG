@@ -538,7 +538,8 @@ Restituisci esclusivamente:
   "narration": "testo naturale del narratore",
   "canon_facts": [],
   "npc_updates": [],
-  "quest_updates": []
+  "quest_updates": [],
+  "npc_creations": []
 }}
 
 npc_updates usa questo formato quando necessario:
@@ -579,6 +580,17 @@ Formato:
   }}
 ]
 Aggiorna una quest esistente solo quando la storia fornisce una ragione concreta.
+
+NPC NUOVI
+Se durante questa scena compare una persona nuova che deve diventare un personaggio persistente,
+puoi aggiungerla a npc_creations. Non usare questa lista per ogni passante casuale: usala quando
+il nuovo NPC ha un ruolo reale nella scena o potrà essere rilevante in futuro.
+Descrivi l'identità in modo sufficiente a permettere al sistema di creare una persona coerente.
+Esempio:
+"npc_creations": [
+  {"description": "Donna umana di circa 40 anni, proprietaria della locanda, pragmatica e cordiale.", "role": "locandiera"}
+]
+Non creare un NPC già presente nel CONTEXT.
 
 La narrazione deve essere in italiano, naturale, concreta e coerente.
 """.strip()
