@@ -4,9 +4,17 @@ import json
 import re
 
 from app.ai_provider import ask_ollama
-from app.game_engine import advance_turn, ensure_game_state, snapshot
+from app.game_engine import advance_turn, ensure_game_state, snapshot, execute_action
 from app.database.characters_db import get_character, save_character
-from app.memory.memory import create_event, create_memory, get_character_memories, get_recent_events, reset_character_history
+from app.memory.memory import (
+    create_event,
+    create_memory,
+    create_memory_from_fact,
+    get_character_memories,
+    get_recent_events,
+    get_relevant_memories,
+    reset_character_history,
+)
 
 
 MAX_HISTORY = 40
@@ -86,7 +94,7 @@ def _explicit_memory(player_message: str, character_name: str) -> str | None:
     return f"Il PLAYER ha chiesto di ricordare: {fact}"
 
 
-def _build_context(character: dict) -> dict:
+def _build_context(character: dict, query: str = "") -> dict:
     identity = character["identity"]
     extra = character.get("extra", {})
     if not isinstance(extra, dict):
@@ -119,7 +127,12 @@ def _build_context(character: dict) -> dict:
             "involved_characters": extra.get("involved_characters", []),
             "available_location_ids": extra.get("available_location_ids", []),
         },
-        "memories": get_character_memories(character["id"], limit=MAX_MEMORIES, include_secrets=True),
+        "memories": get_relevant_memories(
+            character["id"],
+            query,
+            limit=MAX_MEMORIES,
+            include_secrets=True,
+        ) if query.strip() else get_character_memories(character["id"], limit=MAX_MEMORIES, include_secrets=True),
         "recent_events": get_recent_events(character["id"], limit=MAX_EVENTS),
         "world_canon": extra.get("world_canon", []) if isinstance(extra.get("world_canon"), list) else [],
     }
@@ -248,6 +261,9 @@ Distingui sempre ciò che il PLAYER sa da ciò che il mondo/NPC sa.
 Le informazioni possono essere scoperte durante la storia, ma una scoperta successiva non deve contraddire quanto già narrato.
 
 MEMORIA
+Il CONTEXT contiene una selezione di memorie pertinenti all'ultimo messaggio, non necessariamente le più recenti.
+Usa quelle memorie per mantenere continuità quando un argomento, una persona, un luogo o un evento ritorna dopo molti turni.
+Non presumere che una memoria non presente nella selezione sia falsa: semplicemente non è stata recuperata per questo turno.
 Una memoria persistente va creata solo per un fatto realmente importante e utile nel futuro.
 Il normale scambio di battute non è memoria.
 Se il PLAYER dice esplicitamente "ricordati..." o equivalente, il server salverà il fatto separatamente.
@@ -297,7 +313,7 @@ def story_turn(character_id: int, player_message: str):
     ensure_game_state(extra)
     advance_turn(extra)
     history = _clean_history(extra)
-    context = _build_context(character)
+    context = _build_context(character, message)
 
     system_prompt = _build_system_prompt(context, history)
     user_prompt = json.dumps(
@@ -351,6 +367,14 @@ def story_turn(character_id: int, player_message: str):
     canon_facts = [str(f).strip() for f in canon_facts if isinstance(f, str) and f.strip()]
     canon_facts = canon_facts[:20]
 
+    # L'azione proposta dall'IA passa sempre dal Game Engine prima di diventare
+    # stato reale. L'IA può interpretare l'intento, ma non può concedersi da sola
+    # movimento, consumo di oggetti o altre modifiche autorevoli.
+    engine_result = execute_action(extra, action)
+
+    if not engine_result.get("valid", False):
+        action = engine_result.get("action", {"type": "none"})
+
     existing_canon = extra.get("world_canon", [])
     if not isinstance(existing_canon, list):
         existing_canon = []
@@ -394,9 +418,29 @@ def story_turn(character_id: int, player_message: str):
             "player_message": message,
             "narration": narration,
             "action": action,
+            "engine_result": engine_result,
             "canon_facts": canon_facts,
             "explicit_memory_id": memory_id,
         },
+    )
+
+    canon_memory_ids = []
+    for fact in canon_facts:
+        canon_memory_ids.append(
+            create_memory_from_fact(
+                character_id=character_id,
+                content=fact,
+                memory_type="world_fact",
+                importance=7,
+                source_event_id=event_id,
+            )
+        )
+
+    save_character(
+        character["identity"],
+        character["languages"],
+        extra_data=extra,
+        character_id=character_id,
     )
 
     return {
@@ -404,5 +448,7 @@ def story_turn(character_id: int, player_message: str):
         "conversation": history,
         "event_id": event_id,
         "created_memory_id": memory_id,
+        "canon_memory_ids": canon_memory_ids,
         "action": action,
+        "engine_result": engine_result,
     }
