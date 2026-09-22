@@ -67,6 +67,36 @@ def record_world_event(extra: dict[str, Any], event_type: str, payload: dict[str
 
 
 
+def resolve_existing_location(extra: dict[str, Any], target: str) -> Location | None:
+    """Risolvi solo una località già presente nel mondo persistente."""
+    world = ensure_world(extra)
+    wanted = " ".join(str(target).strip().split()).casefold()
+    if not wanted:
+        return None
+    direct = world.get_location(wanted)
+    if direct is not None:
+        return direct
+    for location in world.locations.values():
+        if location.location_id.casefold() == wanted or location.name.casefold() == wanted:
+            return location
+    return None
+
+
+def reachable_location_ids(extra: dict[str, Any]) -> list[str]:
+    """Restituisce solo le destinazioni realmente collegate alla posizione corrente."""
+    world = ensure_world(extra)
+    current = extra.get("game_state", {}).get("location")
+    if current is None:
+        return sorted(world.locations.keys())
+    routes = world.geography.connected_routes(str(current), available_only=True)
+    result = set()
+    for route in routes:
+        other = route.destination_id if route.origin_id == str(current) else route.origin_id
+        if other in world.locations:
+            result.add(other)
+    return sorted(result)
+
+
 def move_actor(extra: dict[str, Any], actor_id: int, target_id: str | None = None, target_name: str | None = None) -> dict[str, Any]:
     world = ensure_world(extra)
     target = None
@@ -82,19 +112,16 @@ def move_actor(extra: dict[str, Any], actor_id: int, target_id: str | None = Non
                 break
 
     if target is None and target_name:
-        normalized = " ".join(str(target_name).strip().split())
-        slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in normalized).strip("_")
-        location_id = "loc_" + (slug[:80] or uuid.uuid4().hex)
-        if location_id in world.locations:
-            target = world.locations[location_id]
-        else:
-            target = Location.create(normalized, "area", location_id=location_id)
-            world.add_location(target)
+        target = resolve_existing_location(extra, target_name)
 
     if target is None:
-        raise ValueError("Destinazione non trovata.")
+        raise ValueError("Destinazione non trovata nel mondo persistente.")
 
     previous = extra.get("game_state", {}).get("location")
+    if previous is not None and target.location_id != str(previous):
+        reachable = set(reachable_location_ids(extra))
+        if target.location_id not in reachable:
+            raise ValueError("La destinazione non è collegata alla posizione corrente.")
     extra["game_state"]["location"] = target.location_id
     target.add_character(str(actor_id))
     world.update()
