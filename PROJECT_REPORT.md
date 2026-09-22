@@ -518,7 +518,7 @@ Le informazioni non vengono considerate globalmente conosciute solo perché il m
 ### Da completare prima di una distribuzione commerciale
 
 Restano attività di prodotto, non correzioni concettuali del sistema narrativo:
-- UI finale per memoria/quest/inventario/combat;
+- UI dedicata per memoria/inventario/combat; la chat ora mostra stato e quest attive;
 - installer e packaging desktop/Steam;
 - provider AI locale integrato senza installazione manuale di Ollama;
 - test end-to-end su una storia lunga;
