@@ -167,6 +167,7 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if character is None: raise ValueError(f"Personaggio con ID {character_id} non trovato.")
 
     conversation = get_character_conversation(character_id)
+    original_player_input = player_input.strip()
     context = build_character_context(character_id)
     # Per una conversazione lunga, recupera anche memorie vecchie pertinenti
     # all'argomento corrente invece di affidarsi solo alla recency.
@@ -183,7 +184,6 @@ def process_character_turn(character_id, player_input, recent_conversation=None)
     if any(m.get("character_id") != character_id for m in context.get("memories", [])): raise ValueError("Il contesto contiene una memoria appartenente a un altro personaggio.")
     if any(e.get("character_id") != character_id for e in context.get("recent_events", [])): raise ValueError("Il contesto contiene un evento appartenente a un altro personaggio.")
 
-    original_player_input = player_input.strip()
     ai_player_input = _player_reference_hint(original_player_input)
     raw_result = ask_character(context, ai_player_input)
     try: result = json.loads(raw_result)
