@@ -27,6 +27,22 @@ class GameEngineContractTests(unittest.TestCase):
             "parameters": {},
         })["valid"])
 
+    def test_move_can_create_an_explicitly_named_location(self):
+        extra = {}
+        ensure_game_state(extra)
+        result = execute_action(
+            extra,
+            {
+                "type": "move",
+                "target_id": None,
+                "target_text": "Cucina",
+                "parameters": {},
+            },
+            actor_id=1,
+        )
+        self.assertTrue(result["valid"])
+        self.assertEqual(extra["game_state"]["location"], "loc_cucina")
+
     def test_use_item_cannot_create_items(self):
         extra = {"inventory": {"potion": 1}}
         ensure_game_state(extra)
