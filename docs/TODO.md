@@ -1,44 +1,29 @@
-# AI RPG — Stato del progetto
+# TODO AI_RPG
 
-## Core completato
+## Stato attuale
 
-- [x] Chat narrativa libera senza menu.
-- [x] Player agency separata dal narratore.
-- [x] Pipeline intent AI → Game Engine → Narration AI.
-- [x] Stato autorevole di HP, stamina, mana, inventario, posizione e flag.
-- [x] Validazione delle azioni AI.
-- [x] Memoria persistente con recupero per rilevanza.
-- [x] Fatti canonici persistenti.
-- [x] Eventi persistenti.
-- [x] Relazioni persistenti.
-- [x] Interazioni NPC con memoria e conoscenza separate.
-- [x] Mondo persistente con orologio e cronologia eventi.
-- [x] Luoghi persistenti e scoperta di nuove destinazioni esplicitamente indicate dal PLAYER.
-- [x] Movimento collegato al Game Engine.
-- [x] Combattimento narrativo persistente.
-- [x] Danni, costi, risorse e condizioni calcolati dal combat engine.
-- [x] Persistenza delle conseguenze del combattimento sui personaggi.
-- [x] Reset della storia con stato narrativo e mondo separati.
-- [x] API per stato del personaggio e stato del mondo.
-- [x] Test dei contratti principali del Game Engine.
+Il nucleo narrativo persistente è integrato:
+- interpretazione AI -> Game Engine -> narrazione;
+- memoria contestuale persistente;
+- memoria individuale NPC;
+- relazioni e reazioni NPC persistenti;
+- mondo e tempo persistenti;
+- movimento vincolato alle rotte del mondo;
+- quest persistenti;
+- combattimento narrativo collegato al combat engine;
+- salvataggio dello stato nel database/personaggio.
 
-## Da completare solo se si vogliono sistemi RPG più profondi
+## Prossime attività di prodotto
 
-Questi elementi non sono necessari per il nucleo conversazionale persistente, ma possono essere aggiunti in seguito senza cambiare l'architettura:
+Queste non sono fondamenta mancanti, ma attività necessarie per una release completa:
+1. test end-to-end su sessioni molto lunghe;
+2. bilanciamento di combattimento, magia, stamina e relazioni;
+3. UI dedicata a quest, memoria, inventario e stato del mondo;
+4. gestione degli errori AI con retry/fallback senza interrompere la partita;
+5. packaging desktop/Steam;
+6. provider locale integrato per eliminare la dipendenza da un'installazione manuale di Ollama;
+7. contenuti iniziali del mondo e NPC.
 
-- [ ] Sistema quest strutturato con obiettivi, ricompense e stati.
-- [ ] Economia e commercio realmente collegati alle azioni narrative.
-- [ ] Equipaggiamento con statistiche, usura e riparazione.
-- [ ] Progressione esperienza/livello.
-- [ ] Sistema di reputazione/fazioni collegato agli eventi.
-- [ ] Simulazione autonoma avanzata degli NPC fuori scena.
-- [ ] Mappa grafica.
-- [ ] UI avanzata per inventario, statistiche, relazioni e mondo.
-- [ ] Packaging standalone/Steam con provider AI integrato.
-- [ ] Test end-to-end con un'istanza reale di Ollama.
+## Regola
 
-## Regola architetturale
-
-L'AI interpreta e racconta. Il Game Engine decide cosa è realmente successo. La memoria e il World State conservano ciò che deve continuare a essere vero.
-
-Il mondo può essere creativo. Il personaggio del PLAYER non viene inventato dall'AI.
+Non aggiungere sistemi narrativi che permettano all'AI di modificare direttamente lo stato autorevole.
