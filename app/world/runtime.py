@@ -34,6 +34,13 @@ def ensure_world(extra: dict[str, Any]) -> WorldState:
     return world
 
 
+def save_world(extra: dict[str, Any]) -> WorldState:
+    world = ensure_world(extra)
+    world.update()
+    _repository.save(world)
+    return world
+
+
 def advance_world(extra: dict[str, Any], minutes: int = 1) -> dict[str, Any]:
     world = ensure_world(extra)
     minutes = max(0, int(minutes))
