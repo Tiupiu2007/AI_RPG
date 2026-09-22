@@ -376,6 +376,8 @@ def story_turn(character_id: int, player_message: str):
 
     if not engine_result.get("valid", False):
         action = engine_result.get("action", {"type": "none"})
+        # Una proposta rifiutata dall'engine non può essere narrata come già riuscita.
+        narration = engine_result.get("reason") or "Non puoi eseguire questa azione in questo momento."
 
     existing_canon = extra.get("world_canon", [])
     if not isinstance(existing_canon, list):
