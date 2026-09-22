@@ -319,8 +319,34 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
     elif action_type == "use_item":
         item_id = str(action["target_id"] if action["target_id"] is not None else action["target_text"])
         quantity = max(1, _number(parameters.get("quantity"), 1))
-        remove_item(extra, item_id, quantity)
+        if not remove_item(extra, item_id, quantity):
+            return {
+                "executed": False,
+                "valid": False,
+                "reason": "L'oggetto non è disponibile in quantità sufficiente.",
+                "action": action,
+                "changes": {},
+            }
+
+        item_definitions = extra.get("item_definitions", {})
+        item = item_definitions.get(item_id, {}) if isinstance(item_definitions, dict) else {}
+        effects = item.get("effects", {}) if isinstance(item, dict) else {}
+        if not isinstance(effects, dict):
+            effects = {}
+        effect_changes = {}
+        for resource in ("health", "stamina", "mana"):
+            if resource in effects:
+                amount = max(0, _number(effects.get(resource), 0)) * quantity
+                if amount:
+                    before = _number(extra["conditions"].get(resource), 0)
+                    if resource == "health":
+                        after = change_health(extra, amount)
+                    else:
+                        restore_resource(extra, resource, amount)
+                        after = _number(extra["conditions"].get(resource), 0)
+                    effect_changes[resource] = {"from": before, "to": after}
         changes["inventory"] = {"removed": {item_id: quantity}}
+        changes["effects"] = effect_changes
 
     elif action_type in {"attack", "defend", "cast_magic", "flee"}:
         if not isinstance(actor_id, int) or isinstance(actor_id, bool):
@@ -339,10 +365,54 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
                 "action": action,
                 "changes": {},
             }
-        try:
-            from app.game_engine.combat_runtime import resolve_narrative_combat
-            combat_result = resolve_narrative_combat(extra, actor_id, action)
-        except (ValueError, TypeError) as error:
+
+        # La magia fuori dal combattimento usa solo definizioni già presenti
+        # nello stato del personaggio; non inventiamo costi o poteri.
+        if action_type == "cast_magic" and not isinstance(extra.get("combat_state"), dict):
+            ability_id = parameters.get("ability_id", action.get("target_id"))
+            definitions = []
+            abilities = extra.get("abilities", [])
+            if isinstance(abilities, list):
+                definitions.extend(x for x in abilities if isinstance(x, dict))
+            magic = extra.get("magic", {})
+            if isinstance(magic, dict):
+                spells = magic.get("spells", magic.get("abilities", []))
+                if isinstance(spells, list):
+                    definitions.extend(x for x in spells if isinstance(x, dict))
+            ability = next(
+                (
+                    item for item in definitions
+                    if str(item.get("id", item.get("ability_id", item.get("name", "")))) == str(ability_id)
+                ),
+                None,
+            )
+            if ability is None:
+                return {
+                    "executed": False,
+                    "valid": False,
+                    "reason": "Magia o abilità non trovata nello stato autorevole.",
+                    "action": action,
+                    "changes": {},
+                }
+            mana_cost = max(0, _number(ability.get("mana_cost"), 0))
+            if not spend_resource(extra, "mana", mana_cost):
+                return {
+                    "executed": False,
+                    "valid": False,
+                    "reason": "Mana insufficiente.",
+                    "action": action,
+                    "changes": {},
+                }
+            changes["magic"] = {
+                "ability_id": ability_id,
+                "mana_cost": mana_cost,
+                "remaining_mana": extra["conditions"]["mana"],
+            }
+        elif action_type in {"attack", "defend", "flee"} or isinstance(extra.get("combat_state"), dict):
+            try:
+                from app.game_engine.combat_runtime import resolve_narrative_combat
+                combat_result = resolve_narrative_combat(extra, actor_id, action)
+            except (ValueError, TypeError) as error:
             return {
                 "executed": False,
                 "valid": False,
