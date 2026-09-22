@@ -481,3 +481,46 @@ Il Game Engine deve essere responsabile di:
 - altri dati meccanici persistenti.
 
 Questa separazione è la base per rendere il progetto stabile e, in futuro, trasformarlo in un gioco distribuibile.
+
+
+## Integrazione narrativa completata - 22 settembre 2026
+
+Il turno narrativo ora segue un flusso a tre fasi:
+1. L'AI interpreta l'intento del PLAYER.
+2. Il Game Engine valida ed esegue l'azione reale.
+3. Una seconda chiamata AI racconta esclusivamente il risultato dello stato aggiornato.
+
+Sono inoltre integrati:
+- recupero delle memorie per rilevanza sul messaggio corrente;
+- memoria individuale degli NPC;
+- stato persistente degli NPC;
+- effetti sociali limitati e validati dall'engine;
+- aggiornamento di fiducia, affetto, rispetto e ostilità;
+- memorie importanti degli NPC;
+- quest persistenti con obiettivi e stato;
+- movimento vincolato alle località e alle rotte realmente presenti nel mondo;
+- destinazioni non più create automaticamente da un intent AI;
+- destinazioni raggiungibili esposte nel CONTEXT;
+- cronologia degli eventi del mondo;
+- persistenza del mondo separata dalla cronologia chat.
+
+### Regola architetturale finale
+
+L'AI interpreta e narra. Il Game Engine decide ciò che diventa realmente vero.
+
+Il PLAYER controlla il proprio personaggio.
+Il mondo è persistente.
+Ogni NPC possiede una propria memoria e conoscenza.
+Le relazioni cambiano solo tramite effetti validati.
+Le quest restano nel salvataggio.
+Le informazioni non vengono considerate globalmente conosciute solo perché il modello le conosce.
+
+### Da completare prima di una distribuzione commerciale
+
+Restano attività di prodotto, non correzioni concettuali del sistema narrativo:
+- UI finale per memoria/quest/inventario/combat;
+- installer e packaging desktop/Steam;
+- provider AI locale integrato senza installazione manuale di Ollama;
+- test end-to-end su una storia lunga;
+- bilanciamento delle regole di combattimento, magia ed economia;
+- contenuti iniziali del mondo.
