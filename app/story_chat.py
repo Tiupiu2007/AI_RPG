@@ -5,6 +5,7 @@ import re
 
 from app.ai_provider import ask_ollama
 from app.game_engine import advance_turn, ensure_game_state, snapshot, execute_action
+from app.game_engine.quests import active_quests, apply_quest_updates
 from app.database.characters_db import get_character, save_character
 from app.relationships.relationships import get_character_relationships
 from app.world.runtime import advance_world, get_world_context, record_world_event, reachable_location_ids
@@ -191,6 +192,7 @@ def _build_context(character: dict, query: str = "") -> dict:
         ) if query.strip() else get_character_memories(character["id"], limit=MAX_MEMORIES, include_secrets=True),
         "recent_events": get_recent_events(character["id"], limit=MAX_EVENTS),
         "world_canon": extra.get("world_canon", []) if isinstance(extra.get("world_canon"), list) else [],
+        "quests": active_quests(extra),
     }
 
 
@@ -501,7 +503,8 @@ Restituisci esclusivamente:
 {{
   "narration": "testo naturale del narratore",
   "canon_facts": [],
-  "npc_updates": []
+  "npc_updates": [],
+  "quest_updates": []
 }}
 
 npc_updates usa questo formato quando necessario:
@@ -525,6 +528,23 @@ npc_updates usa questo formato quando necessario:
   }}
 ]
 Non devi sempre produrre npc_updates: usa [] quando non servono.
+
+QUEST
+Puoi produrre quest_updates solo quando dalla scena emerge un obiettivo concreto e persistente.
+Non creare quest solo per riempire la storia. Usa ID stabili e obiettivi concreti.
+Formato:
+[
+  {{
+    "id": "quest_id",
+    "title": "titolo",
+    "description": "descrizione",
+    "status": "active",
+    "objectives": [
+      {{"id": "objective_1", "text": "obiettivo concreto", "done": false}}
+    ]
+  }}
+]
+Aggiorna una quest esistente solo quando la storia fornisce una ragione concreta.
 
 La narrazione deve essere in italiano, naturale, concreta e coerente.
 """.strip()
@@ -633,6 +653,13 @@ def story_turn(character_id: int, player_message: str):
 
     canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
     npc_updates = _parse_npc_updates(narration_result.get("npc_updates"))
+    raw_quest_updates = narration_result.get("quest_updates")
+    quest_updates = raw_quest_updates if isinstance(raw_quest_updates, list) else []
+    quest_results = apply_quest_updates(
+        extra,
+        quest_updates,
+        int(extra.get("game_state", {}).get("turn", 0)),
+    )
 
     social_results = []
     from app.game_engine.narrative_effects import apply_social_effects
@@ -659,6 +686,8 @@ def story_turn(character_id: int, player_message: str):
             continue
     if social_results:
         engine_result["social"] = social_results
+    if quest_results:
+        engine_result["quests"] = quest_results
 
     existing_canon = extra.get("world_canon", [])
     if not isinstance(existing_canon, list):
@@ -715,6 +744,7 @@ def story_turn(character_id: int, player_message: str):
             "canon_facts": canon_facts,
             "npc_updates": npc_updates,
             "social_results": social_results,
+            "quest_results": quest_results,
             "explicit_memory_id": memory_id,
             "world_event_id": world_event_id,
         },
@@ -747,6 +777,7 @@ def story_turn(character_id: int, player_message: str):
         "canon_memory_ids": canon_memory_ids,
         "npc_updates": npc_updates,
         "social_results": social_results,
+        "quest_results": quest_results,
         "action": action,
         "engine_result": engine_result,
     }
