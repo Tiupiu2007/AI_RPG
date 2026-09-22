@@ -103,11 +103,27 @@ def move_actor(extra: dict[str, Any], actor_id: int, target_id: str | None = Non
 
 def get_world_context(extra: dict[str, Any]) -> dict[str, Any]:
     world = ensure_world(extra)
+    current_id = None
+    game_state = extra.get("game_state")
+    if isinstance(game_state, dict):
+        current_id = game_state.get("location")
+    current = world.get_location(str(current_id)) if current_id is not None else None
     return {
         "world_id": world.world_id,
         "name": world.name,
         "description": world.description,
         "clock": world.clock.to_dict(),
+        "current_location": (
+            {
+                "id": current.location_id,
+                "name": current.name,
+                "type": current.location_type,
+                "description": current.description,
+                "character_ids": list(current.character_ids),
+            }
+            if current is not None
+            else None
+        ),
         "location_ids": sorted(world.locations.keys()),
         "recent_world_events": list(world.events.values())[-12:],
         "factions": sorted(world.factions.factions.keys()),
