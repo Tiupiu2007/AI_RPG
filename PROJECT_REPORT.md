@@ -1,6 +1,6 @@
 # AI_RPG — Report del progetto
 
-Ultimo aggiornamento: 18 settembre 2026
+Ultimo aggiornamento: 22 settembre 2026
 
 ## 1. Scopo
 
@@ -52,8 +52,10 @@ Il sistema attuale:
 - mantiene la cronologia della storia;
 - usa fino a 40 messaggi di cronologia;
 - passa gli ultimi 12 messaggi al prompt;
-- recupera memorie persistenti;
+- recupera memorie persistenti pertinenti al messaggio corrente;
 - recupera eventi recenti;
+- passa al narratore le relazioni persistenti del personaggio;
+- indicizza i fatti canonici importanti anche nel sistema di memoria;
 - passa all'IA lo stato autorevole del Game Engine;
 - salva la risposta dell'IA;
 - registra ogni turno come evento;
@@ -149,11 +151,11 @@ Lo stato è esposto anche tramite:
 
 `/api/game-state/<character_id>`
 
-### Limite attuale
+### Flusso attuale
 
-Il Game Engine non è ancora il sistema completo che interpreta automaticamente ogni azione libera del giocatore.
+L'azione strutturata prodotta dall'IA passa ora da `execute_action()` prima di diventare stato reale. Le azioni non valide non vengono applicate e non vengono narrate come riuscite.
 
-L'architettura prevista è:
+L'architettura è:
 
 ```
 PLAYER
@@ -401,20 +403,16 @@ Questo file costituisce il report generale dello stato del progetto; le specific
 - frontend della chat;
 - database dei personaggi.
 
-### PRESENTE MA DA INTEGRARE COMPLETAMENTE
+### INTEGRAZIONE ANCORA NECESSARIA
 
-- parser automatico dell'intento del giocatore;
-- esecuzione automatica delle azioni attraverso il Game Engine;
-- movimento completo narrativo + meccanico;
-- uso completo dell'inventario nelle azioni libere;
-- magia con costi e conseguenze gestiti dall'engine;
-- combattimento integrato nella storia;
-- NPC persistenti con stato completo;
-- relazioni dinamiche integrate;
-- quest;
-- simulazione completa del mondo;
-- save/load completo dell'intero mondo;
-- distribuzione Steam senza dipendenza manuale da Ollama.
+- regole complete per attacco/difesa/magia con costi e conseguenze meccaniche;
+- combattimento narrativo integrato end-to-end;
+- sistema NPC completo con memoria individuale, conoscenze e obiettivi aggiornati dal mondo;
+- aggiornamento automatico delle relazioni in base agli eventi sociali;
+- quest persistenti e obiettivi di lungo periodo;
+- simulazione completa del mondo collegata al passaggio del tempo;
+- save/load completo e versionato dell'intero mondo;
+- packaging/distribuzione con provider AI installabile senza Ollama manuale.
 
 ---
 
@@ -422,10 +420,11 @@ Questo file costituisce il report generale dello stato del progetto; le specific
 
 L'ordine consigliato per continuare il progetto è:
 
-1. Parser dell'intento del giocatore.
-2. Validazione dell'azione tramite Game Engine.
-3. Esecuzione delle modifiche reali allo stato.
-4. Inventario utilizzabile dalla narrazione.
+1. Completare le regole meccaniche di tutte le azioni.
+2. Integrare combattimento, NPC e relazioni nel turno narrativo.
+3. Implementare quest e obiettivi persistenti.
+4. Collegare il simulatore del mondo al tempo di gioco.
+5. Implementare save/load completo.
 5. Movimento e posizioni persistenti.
 6. Magia e consumo delle risorse.
 7. Combattimento integrato.
