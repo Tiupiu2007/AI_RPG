@@ -80,6 +80,30 @@ def save_combat(extra: dict[str, Any], state: CombatState) -> None:
     extra["combat_state"] = state.to_dict()
 
 
+def _sync_character(character_id: int, combatant: CombatantState) -> None:
+    character = get_character(character_id)
+    if character is None:
+        return
+    extra = character.get("extra", {})
+    if not isinstance(extra, dict):
+        extra = {}
+    conditions = extra.get("conditions", {})
+    if not isinstance(conditions, dict):
+        conditions = {}
+    conditions.update({
+        "health": combatant.health,
+        "max_health": combatant.max_health,
+        "stamina": combatant.stamina,
+        "max_stamina": combatant.max_stamina,
+        "mana": combatant.mana,
+        "max_mana": combatant.max_mana,
+        "status": combatant.status,
+    })
+    extra["conditions"] = conditions
+    from app.database.characters_db import save_character
+    save_character(character["identity"], character.get("languages", []), extra_data=extra, character_id=character_id)
+
+
 def start_combat(extra: dict[str, Any], actor_id: int, target_id: int) -> CombatState:
     if actor_id == target_id:
         raise ValueError("Non puoi iniziare un combattimento contro te stesso.")
@@ -166,6 +190,8 @@ def resolve_narrative_combat(extra: dict[str, Any], actor_id: int, action: dict[
                 state.current_turn_character_id = actor_id
                 state.get_combatant(actor_id).reset_turn_resources()
 
+    for combatant in state.combatants.values():
+        _sync_character(combatant.character_id, combatant)
     save_combat(extra, state)
     new_events = state.events[event_start:]
     return {
