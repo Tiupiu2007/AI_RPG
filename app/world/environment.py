@@ -123,6 +123,17 @@ class EnvironmentEngine:
             is_storm=is_storm,
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the deterministic environment engine configuration."""
+        return {"seed": self.seed}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EnvironmentEngine":
+        """Restore the deterministic environment engine configuration."""
+        if not isinstance(data, dict):
+            return cls()
+        return cls(seed=int(data.get("seed", 0)))
+
     @staticmethod
     def _day_phase(hour: int, minute: int) -> str:
         total = hour * 60 + minute
