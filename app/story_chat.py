@@ -657,6 +657,15 @@ def story_turn(character_id: int, player_message: str):
     else:
         action = engine_result.get("action", action)
 
+    from app.game_engine.progression import apply_progression
+    progression_result = apply_progression(
+        character_id,
+        action.get("type", "none"),
+        bool(engine_result.get("valid", False)),
+    )
+    if progression_result:
+        engine_result["progression"] = progression_result
+
     # Salviamo subito lo stato meccanico prima della generazione narrativa.
     save_character(
         character["identity"],
