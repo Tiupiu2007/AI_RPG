@@ -261,9 +261,9 @@ def combatant_from_character(character: dict[str, Any]) -> CombatantState:
     if not isinstance(conditions, dict):
         conditions = {}
 
-    max_health = _positive_int(conditions.get("health"), 100)
-    max_stamina = _nonnegative_int(conditions.get("stamina"), 100)
-    max_mana = _nonnegative_int(conditions.get("mana"), 0)
+    max_health = _positive_int(conditions.get("max_health"), _positive_int(conditions.get("health"), 100))
+    max_stamina = _nonnegative_int(conditions.get("max_stamina"), _nonnegative_int(conditions.get("stamina"), 100))
+    max_mana = _nonnegative_int(conditions.get("max_mana"), _nonnegative_int(conditions.get("mana"), 0))
 
     # Il sistema PvP usa PA separati dalla stamina: la stamina può restare
     # disponibile per meccaniche future, mentre i PA governano il turno.
@@ -291,11 +291,11 @@ def combatant_from_character(character: dict[str, Any]) -> CombatantState:
     return CombatantState(
         character_id=character_id,
         name=name,
-        health=max_health,
+        health=min(_nonnegative_int(conditions.get("health"), max_health), max_health),
         max_health=max_health,
-        stamina=max_stamina,
+        stamina=min(_nonnegative_int(conditions.get("stamina"), max_stamina), max_stamina),
         max_stamina=max_stamina,
-        mana=max_mana,
+        mana=min(_nonnegative_int(conditions.get("mana"), max_mana), max_mana),
         max_mana=max_mana,
         action_points=action_points,
         max_action_points=max_action_points,
