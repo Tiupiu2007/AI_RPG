@@ -381,6 +381,45 @@ def _parse_action(value) -> dict:
     }
 
 
+def _parse_npc_updates(value) -> list[dict]:
+    """Normalizza solo aggiornamenti riferiti a NPC presenti nella scena."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[:8]:
+        if not isinstance(item, dict):
+            continue
+        target_id = item.get("character_id")
+        if not isinstance(target_id, int) or isinstance(target_id, bool):
+            continue
+        update = {"character_id": target_id}
+        for field in ("emotion", "thought", "intention", "goal"):
+            raw = item.get(field)
+            if isinstance(raw, str) and raw.strip():
+                update[field] = " ".join(raw.strip().split())[:500]
+        social = item.get("social_effects")
+        if isinstance(social, dict):
+            allowed = {}
+            for field in ("trust", "affection", "respect", "hostility"):
+                value = social.get(field)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    allowed[field] = max(-5, min(5, value))
+            memory = social.get("memory")
+            if isinstance(memory, dict):
+                content = memory.get("content")
+                importance = memory.get("importance", 5)
+                if isinstance(content, str) and content.strip() and isinstance(importance, int):
+                    allowed["memory"] = {
+                        "content": " ".join(content.strip().split())[:400],
+                        "importance": max(5, min(8, importance)),
+                    }
+            if allowed:
+                update["social_effects"] = allowed
+        if len(update) > 1:
+            result.append(update)
+    return result
+
+
 def _parse_canon_facts(value) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -446,14 +485,46 @@ REGOLE OBBLIGATORIE:
 CONTEXT:
 {context_text}
 
+AGGIORNAMENTI NPC
+Dopo aver narrato, puoi proporre aggiornamenti interni sugli NPC coinvolti.
+Sono ammessi solo NPC presenti nel CONTEXT. Non aggiornare il PLAYER.
+Per ogni NPC puoi indicare emozione, pensiero, intenzione e obiettivo attuali.
+Puoi indicare social_effects solo se l'interazione ha realmente prodotto una conseguenza:
+trust, affection, respect e hostility sono variazioni da -5 a +5, non valori assoluti.
+Puoi creare una memoria NPC solo se l'evento è davvero importante e potrà essere utile più avanti.
+Non trasformare ogni battuta in una modifica della relazione.
+
 CRONOLOGIA RECENTE:
 {history_text}
 
 Restituisci esclusivamente:
 {{
   "narration": "testo naturale del narratore",
-  "canon_facts": []
+  "canon_facts": [],
+  "npc_updates": []
 }}
+
+npc_updates usa questo formato quando necessario:
+[
+  {{
+    "character_id": 123,
+    "emotion": "breve stato emotivo",
+    "thought": "pensiero dell'NPC",
+    "intention": "intenzione attuale",
+    "goal": "obiettivo attuale",
+    "social_effects": {{
+      "trust": 1,
+      "affection": 0,
+      "respect": 1,
+      "hostility": 0,
+      "memory": {{
+        "content": "fatto importante che l'NPC ricorderà",
+        "importance": 5
+      }}
+    }}
+  }}
+]
+Non devi sempre produrre npc_updates: usa [] quando non servono.
 
 La narrazione deve essere in italiano, naturale, concreta e coerente.
 """.strip()
@@ -561,6 +632,33 @@ def story_turn(character_id: int, player_message: str):
     narration = narration.strip()
 
     canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
+    npc_updates = _parse_npc_updates(narration_result.get("npc_updates"))
+
+    social_results = []
+    from app.game_engine.narrative_effects import apply_social_effects
+    for update in npc_updates:
+        target_id = update["character_id"]
+        if action.get("type") != "talk" or action.get("target_id") != target_id:
+            continue
+        try:
+            effects = dict(update.get("social_effects") or {})
+            effects.update({
+                key: value
+                for key, value in update.items()
+                if key in {"emotion", "thought", "intention", "goal"}
+            })
+            social_results.append(
+                apply_social_effects(
+                    actor_id=character_id,
+                    target_id=target_id,
+                    effects=effects,
+                    extra=extra,
+                )
+            )
+        except (ValueError, TypeError):
+            continue
+    if social_results:
+        engine_result["social"] = social_results
 
     existing_canon = extra.get("world_canon", [])
     if not isinstance(existing_canon, list):
@@ -615,6 +713,8 @@ def story_turn(character_id: int, player_message: str):
             "action": action,
             "engine_result": engine_result,
             "canon_facts": canon_facts,
+            "npc_updates": npc_updates,
+            "social_results": social_results,
             "explicit_memory_id": memory_id,
             "world_event_id": world_event_id,
         },
@@ -645,6 +745,8 @@ def story_turn(character_id: int, player_message: str):
         "event_id": event_id,
         "created_memory_id": memory_id,
         "canon_memory_ids": canon_memory_ids,
+        "npc_updates": npc_updates,
+        "social_results": social_results,
         "action": action,
         "engine_result": engine_result,
     }
