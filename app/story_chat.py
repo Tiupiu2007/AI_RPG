@@ -299,6 +299,111 @@ ULTIMI MESSAGGI:
 """.strip()
 
 
+def _parse_action(value) -> dict:
+    if not isinstance(value, dict):
+        value = {}
+    action_type = value.get("type", "none")
+    allowed = {
+        "none", "move", "inspect", "interact", "use_item",
+        "cast_magic", "attack", "defend", "talk", "flee",
+    }
+    if action_type not in allowed:
+        action_type = "none"
+    target_id = value.get("target_id")
+    if target_id is not None and not isinstance(target_id, (int, str)):
+        target_id = None
+    target_text = value.get("target_text")
+    if target_text is not None and not isinstance(target_text, str):
+        target_text = str(target_text)
+    parameters = value.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+    return {
+        "type": action_type,
+        "target_id": target_id,
+        "target_text": target_text,
+        "parameters": parameters,
+    }
+
+
+def _parse_canon_facts(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            fact = " ".join(item.strip().split())
+            if len(fact) <= 300 and fact not in result:
+                result.append(fact)
+    return result[:20]
+
+
+def _narration_prompt(
+    context: dict,
+    history: list[dict],
+    message: str,
+    action: dict,
+    engine_result: dict,
+) -> str:
+    context_text = json.dumps(context, ensure_ascii=False, indent=2, default=_json_safe)
+    history_text = json.dumps(history[-12:], ensure_ascii=False)
+    action_text = json.dumps(action, ensure_ascii=False)
+    result_text = json.dumps(engine_result, ensure_ascii=False, indent=2, default=_json_safe)
+
+    return f"""
+Sei il narratore di un RPG persistente. Devi raccontare ESCLUSIVAMENTE il risultato
+dell'ultimo turno del PLAYER.
+
+PLAYER:
+{message}
+
+INTENTO INTERPRETATO:
+{action_text}
+
+RISULTATO AUTOREVOLE DEL GAME ENGINE:
+{result_text}
+
+REGOLE OBBLIGATORIE:
+- Il PLAYER controlla completamente il proprio personaggio.
+- Usa sempre la seconda persona per il PLAYER.
+- Non inventare pensieri, emozioni, ricordi, intenzioni, equipaggiamento, condizioni
+  fisiche o caratteristiche del PLAYER.
+- Non aggiungere una seconda azione del PLAYER dopo quella richiesta.
+- Se il GAME ENGINE ha rifiutato l'azione, NON narrarla come riuscita.
+- Se il GAME ENGINE ha prodotto conseguenze meccaniche, narrale senza cambiare numeri,
+  danni, costi o risultati.
+- Gli NPC possono parlare, reagire, muoversi e avere emozioni coerenti con la loro
+  personalità, conoscenza e relazione con il PLAYER.
+- Un NPC non può sapere fatti che non conosce.
+- Usa le memorie pertinenti, gli eventi e le relazioni presenti nel CONTEXT.
+- Il mondo può contenere dettagli ordinari inventati sul momento, ma non contraddire
+  fatti canonici già stabiliti.
+- Non trasformare ogni cosa in mistero, presagio, magia o minaccia.
+- Non introdurre dettagli personali del PLAYER solo per rendere la scena più ricca.
+- Se il turno è semplice, rispondi semplicemente. Non allungare artificialmente la scena.
+- Mantieni coerenza con la cronologia recente.
+- Se l'azione è osservativa, descrivi ciò che è plausibilmente percepibile senza
+  aggiungere retroattivamente dettagli importanti che prima erano chiaramente visibili.
+- I fatti canonici devono essere concreti e riguardare soprattutto il mondo, NPC,
+  oggetti o conseguenze persistenti. Non trasformare pensieri o azioni del PLAYER
+  in canon.
+
+CONTEXT:
+{context_text}
+
+CRONOLOGIA RECENTE:
+{history_text}
+
+Restituisci esclusivamente:
+{{
+  "narration": "testo naturale del narratore",
+  "canon_facts": []
+}}
+
+La narrazione deve essere in italiano, naturale, concreta e coerente.
+""".strip()
+
+
 def story_turn(character_id: int, player_message: str):
     character = get_character(character_id)
     if character is None:
@@ -315,74 +420,97 @@ def story_turn(character_id: int, player_message: str):
     ensure_game_state(extra)
     advance_turn(extra)
     history = _clean_history(extra)
-    context = _build_context(character, message)
 
-    system_prompt = _build_system_prompt(context, history)
-    user_prompt = json.dumps(
-        {
-            "player_message": message,
-            "instruction": (
-                "Rispondi esclusivamente a questo turno. "
-                "Non continuare autonomamente l'azione del PLAYER."
-            ),
-        },
-        ensure_ascii=False,
+    # PASSO 1: l'AI interpreta l'intento. In questa fase non produciamo ancora
+    # la narrazione mostrata al giocatore.
+    context = _build_context(character, message)
+    intent_prompt = _build_system_prompt(context, history)
+    raw_intent = ask_ollama(
+        intent_prompt,
+        json.dumps(
+            {
+                "player_message": message,
+                "instruction": (
+                    "INTERPRETAZIONE INTERNA. Non produrre una narrazione definitiva. "
+                    "Identifica solamente l'intento meccanico del PLAYER e restituisci "
+                    "il JSON previsto. La chiave narration può essere vuota o minimale: "
+                    "non verrà mostrata al PLAYER."
+                ),
+                "output_focus": "action",
+            },
+            ensure_ascii=False,
+        ),
     )
 
-    raw = ask_ollama(system_prompt, user_prompt)
+    try:
+        parsed_intent = json.loads(raw_intent)
+    except json.JSONDecodeError as error:
+        raise ValueError("L'IA non ha restituito un JSON valido per l'interpretazione dell'azione.") from error
+
+    if not isinstance(parsed_intent, dict):
+        raise ValueError("L'interpretazione dell'azione deve essere un oggetto JSON.")
+
+    action = _parse_action(parsed_intent.get("action"))
+
+    # PASSO 2: il Game Engine decide cosa è realmente successo.
+    engine_result = execute_action(extra, action, actor_id=character_id)
+
+    if engine_result.get("valid", False):
+        action = engine_result.get("action", action)
+    else:
+        action = engine_result.get("action", action)
+
+    # Salviamo subito lo stato meccanico prima della generazione narrativa.
+    save_character(
+        character["identity"],
+        character["languages"],
+        extra_data=extra,
+        character_id=character_id,
+    )
+
+    # PASSO 3: aggiorniamo il contesto con lo stato reale e chiediamo all'AI
+    # solamente di raccontare ciò che il motore ha deciso.
+    refreshed = get_character(character_id)
+    if refreshed is None:
+        raise ValueError(f"Personaggio con ID {character_id} non trovato dopo l'esecuzione.")
+    context = _build_context(refreshed, message)
+
+    narration_raw = ask_ollama(
+        _narration_prompt(context, history, message, action, engine_result),
+        json.dumps(
+            {
+                "player_message": message,
+                "action": action,
+                "engine_result": engine_result,
+                "instruction": "Racconta ora il risultato già determinato dal Game Engine.",
+            },
+            ensure_ascii=False,
+        ),
+    )
 
     try:
-        result = json.loads(raw)
+        narration_result = json.loads(narration_raw)
     except json.JSONDecodeError as error:
-        raise ValueError("L'IA ha restituito una risposta non valida.") from error
+        raise ValueError("L'IA non ha restituito un JSON valido per la narrazione.") from error
 
-    if not isinstance(result, dict):
-        raise ValueError("La risposta dell'IA deve essere un oggetto JSON.")
+    if not isinstance(narration_result, dict):
+        raise ValueError("La narrazione AI deve essere un oggetto JSON.")
 
-    narration = result.get("narration")
+    narration = narration_result.get("narration")
     if not isinstance(narration, str) or not narration.strip():
-        raise ValueError("L'IA non ha restituito una narrazione.")
-
+        raise ValueError("L'IA non ha restituito una narrazione valida.")
     narration = narration.strip()
 
-    action = result.get("action", {})
-    if not isinstance(action, dict):
-        action = {}
-    action_type = action.get("type", "none")
-    allowed_action_types = {"none", "move", "inspect", "interact", "use_item", "cast_magic", "attack", "defend", "talk"}
-    if action_type not in allowed_action_types:
-        action_type = "none"
-    target_id = action.get("target_id")
-    if target_id is not None and not isinstance(target_id, (int, str)):
-        target_id = None
-    target_text = action.get("target_text")
-    if target_text is not None and not isinstance(target_text, str):
-        target_text = str(target_text)
-    parameters = action.get("parameters")
-    if not isinstance(parameters, dict):
-        parameters = {}
-    action = {"type": action_type, "target_id": target_id, "target_text": target_text, "parameters": parameters}
-
-    canon_facts = result.get("canon_facts", [])
-    if not isinstance(canon_facts, list):
-        canon_facts = []
-    canon_facts = [str(f).strip() for f in canon_facts if isinstance(f, str) and f.strip()]
-    canon_facts = canon_facts[:20]
-
-    # L'azione proposta dall'IA passa sempre dal Game Engine prima di diventare
-    # stato reale. L'IA può interpretare l'intento, ma non può concedersi da sola
-    # movimento, consumo di oggetti o altre modifiche autorevoli.
-    engine_result = execute_action(extra, action)
-
-    if not engine_result.get("valid", False):
-        action = engine_result.get("action", {"type": "none"})
-        # Una proposta rifiutata dall'engine non può essere narrata come già riuscita.
-        narration = engine_result.get("reason") or "Non puoi eseguire questa azione in questo momento."
+    canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
 
     existing_canon = extra.get("world_canon", [])
     if not isinstance(existing_canon, list):
         existing_canon = []
-    existing_canon = [str(f).strip() for f in existing_canon if isinstance(f, str) and f.strip()]
+    existing_canon = [
+        str(f).strip()
+        for f in existing_canon
+        if isinstance(f, str) and f.strip()
+    ]
     for fact in canon_facts:
         if fact not in existing_canon:
             existing_canon.append(fact)
@@ -406,14 +534,7 @@ def story_turn(character_id: int, player_message: str):
             {"role": "assistant", "content": narration},
         ]
     )[-MAX_HISTORY:]
-
     extra["story_chat"] = history
-    save_character(
-        character["identity"],
-        character["languages"],
-        extra_data=extra,
-        character_id=character_id,
-    )
 
     event_id = create_event(
         character_id,
