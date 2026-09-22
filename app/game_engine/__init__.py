@@ -238,9 +238,9 @@ def validate_action(extra: dict, action: dict) -> dict:
         available = extra.get("available_location_ids", [])
         if not isinstance(available, list):
             available = []
-        if target_id is None:
-            return {"valid": False, "reason": "Movimento senza location_id.", "action": normalized}
-        if available and target_id not in available:
+        if target_id is None and not target_text:
+            return {"valid": False, "reason": "Movimento senza destinazione.", "action": normalized}
+        if target_id is not None and available and target_id not in available:
             return {"valid": False, "reason": "La destinazione non è disponibile.", "action": normalized}
 
     if action_type == "use_item":
@@ -312,9 +312,25 @@ def execute_action(extra: dict, action: dict, actor_id: int | None = None) -> di
 
     if action_type == "move":
         old_location = extra["game_state"].get("location")
-        new_location = action["target_id"]
+        try:
+            from app.world.runtime import move_actor
+            movement = move_actor(
+                extra,
+                actor_id if isinstance(actor_id, int) else 0,
+                str(action["target_id"]) if action["target_id"] is not None else None,
+                action["target_text"],
+            )
+        except (ValueError, TypeError) as error:
+            return {
+                "executed": False,
+                "valid": False,
+                "reason": str(error),
+                "action": action,
+                "changes": {},
+            }
+        new_location = movement["to"]
         set_location(extra, new_location)
-        changes["location"] = {"from": old_location, "to": new_location}
+        changes["location"] = {"from": old_location, **movement}
 
     elif action_type == "use_item":
         item_id = str(action["target_id"] if action["target_id"] is not None else action["target_text"])
