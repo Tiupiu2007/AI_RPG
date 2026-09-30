@@ -332,6 +332,28 @@ Se un NPC non conosce qualcosa, non può saperla perché tu, come modello, la co
 Distingui sempre ciò che il PLAYER sa da ciò che il mondo/NPC sa.
 Le informazioni possono essere scoperte durante la storia, ma una scoperta successiva non deve contraddire quanto già narrato.
 
+CONTROLLO DEL PLAYER E POSSIBILITÀ
+Il PLAYER mantiene sempre il controllo della prossima decisione.
+Dopo aver raccontato il turno, devi offrire esattamente quattro possibilità future:
+1. Prudente / razionale
+2. Aggressiva / rischiosa
+3. Sociale / esplorativa
+4. Libera / creativa
+Queste possibilità sono solo suggerimenti per il prossimo turno. NON sono azioni già compiute.
+Non descrivere mai una di esse come se il PLAYER l'avesse scelta.
+Devono essere pertinenti alla situazione attuale e sufficientemente diverse tra loro.
+La quarta deve lasciare spazio a una soluzione non prevista.
+Dopo le quattro possibilità deve comparire esattamente:
+**Oppure fai quello che vuoi.**
+
+AUTONOMIA DEL MONDO
+Il mondo non aspetta il PLAYER. Gli NPC possono prendere iniziative, parlare tra loro, discutere,
+allontanarsi, inseguire obiettivi, cambiare opinione, reagire agli eventi o creare nuovi problemi
+senza che il PLAYER li comandi. Queste azioni devono essere coerenti con personalità, conoscenze,
+posizione, relazioni e situazione. Non congelare gli NPC tra un turno e l'altro.
+Non usare l'autonomia degli NPC come scusa per compiere azioni del PLAYER.
+Descrivi al PLAYER solo ciò che può osservare o apprendere legittimamente.
+
 MEMORIA
 La CAMPAGNA è la base persistente della storia corrente. Non trattarla come un copione chiuso: è il punto di partenza dal quale il mondo può evolvere.
 Se non esiste una campagna attiva, non inventare una situazione iniziale: il server deve prima crearla.
@@ -354,15 +376,17 @@ Restituisci esclusivamente un singolo JSON valido:
     "target_text": null,
     "parameters": {{}}
   }},
-  "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"]
+  "canon_facts": ["solo i nuovi fatti persistenti importanti che hai stabilito in questo turno"],
+  "action_options": ["possibilità prudente", "possibilità rischiosa", "possibilità sociale/esplorativa", "possibilità libera/creativa"]
 }}
 `action` rappresenta esclusivamente l'intento meccanico riconoscibile dal messaggio del PLAYER. Usa `none` quando il turno è puramente narrativo, osservativo o dialogico. Tipi ammessi: `none`, `move`, `inspect`, `interact`, `use_item`, `cast_magic`, `attack`, `defend`, `talk`, `flee`. Per `move`, `target_id` è la destinazione. Per `use_item`, `target_id` o `target_text` identifica l'oggetto. Per `attack`, `target_id` è il personaggio bersaglio. Per `cast_magic` in combattimento, `target_id` è il bersaglio e `parameters.ability_id` identifica la magia/abilità. Non inventare ID: usa solo ID presenti nel CONTEXT. `parameters` deve essere un oggetto semplice. Questa struttura è solo un'interpretazione dell'intento: NON significa che l'azione sia già stata eseguita dal GAME ENGINE.
 `canon_facts` deve contenere frasi brevi, concrete e verificabili. Inserisci solo fatti che dovranno restare veri nei turni futuri (per esempio: "La porta della stanza è di legno scuro", "Fuori dalla finestra si vede una foresta"). Non inserire azioni o pensieri del PLAYER, risultati temporanei o semplici impressioni stilistiche. Se non hai stabilito nuovi fatti persistenti, usa [].
 
 Non restituire markdown.
-Non restituire A/B/C.
-Non restituire menu.
-Non scrivere mai azioni future del PLAYER.
+Non restituire menu A/B/C.
+action_options deve contenere esattamente quattro possibilità future, una per ciascuna categoria richiesta.
+Non inserire numerazione, etichette o la frase finale dentro i singoli elementi: il server le aggiungerà.
+Non scrivere mai azioni future del PLAYER come già compiute.
 
 CONTEXT AUTOREVOLE:
 {context_text}
@@ -468,6 +492,38 @@ def _parse_canon_facts(value) -> list[str]:
     return result[:20]
 
 
+def _parse_action_options(value) -> list[str]:
+    """Normalizza esattamente quattro possibilità future mostrate al PLAYER."""
+    result = []
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                result.append(" ".join(item.strip().split())[:300])
+    cleaned = []
+    for item in result:
+        if item not in cleaned:
+            cleaned.append(item)
+    defaults = [
+        "Valutare la situazione e agire con cautela.",
+        "Tentare una soluzione più rischiosa accettandone le possibili conseguenze.",
+        "Parlare con qualcuno o approfondire la situazione.",
+        "Fare qualcosa di diverso scelto liberamente.",
+    ]
+    return (cleaned[:4] + defaults)[:4]
+
+def _format_action_options(options: list[str]) -> str:
+    labels = ("Prudente / razionale", "Aggressiva / rischiosa", "Sociale / esplorativa", "Libera / creativa")
+    lines = []
+    for index, label in enumerate(labels):
+        text = options[index] if index < len(options) else ""
+        if text.startswith(label + ":"):
+            text = text.split(":", 1)[1].strip()
+        lines.append(f"{index + 1}. **{label}:** {text}")
+    lines.append("")
+    lines.append("**Oppure fai quello che vuoi.**")
+    return "\\n".join(lines)
+
+
 def _narration_prompt(
     context: dict,
     history: list[dict],
@@ -517,6 +573,9 @@ REGOLE OBBLIGATORIE:
 - I fatti canonici devono essere concreti e riguardare soprattutto il mondo, NPC,
   oggetti o conseguenze persistenti. Non trasformare pensieri o azioni del PLAYER
   in canon.
+- Gli NPC possono agire autonomamente dopo il turno del PLAYER quando è plausibile, ma non devi aggiungere alcuna nuova azione del PLAYER.
+- La risposta deve terminare con esattamente quattro possibilità future nelle quattro categorie richieste.
+- Le possibilità sono suggerimenti, non azioni già avvenute.
 
 CONTEXT:
 {context_text}
@@ -539,7 +598,8 @@ Restituisci esclusivamente:
   "canon_facts": [],
   "npc_updates": [],
   "quest_updates": [],
-  "npc_creations": []
+  "npc_creations": [],
+  "action_options": ["possibilità prudente", "possibilità rischiosa", "possibilità sociale/esplorativa", "possibilità libera/creativa"]
 }}
 
 npc_updates usa questo formato quando necessario:
@@ -707,6 +767,9 @@ def story_turn(character_id: int, player_message: str):
         raise ValueError("L'IA non ha restituito una narrazione valida.")
     narration = narration.strip()
 
+    action_options = _parse_action_options(narration_result.get("action_options"))
+    narration = narration.rstrip() + "\\n\\n" + _format_action_options(action_options)
+
     canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
     npc_updates = _parse_npc_updates(narration_result.get("npc_updates"))
     npc_creations = _parse_npc_creations(narration_result.get("npc_creations"))
@@ -838,6 +901,7 @@ def story_turn(character_id: int, player_message: str):
 
     return {
         "narration": narration,
+        "action_options": action_options,
         "conversation": history,
         "event_id": event_id,
         "created_memory_id": memory_id,
