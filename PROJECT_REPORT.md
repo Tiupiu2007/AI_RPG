@@ -557,3 +557,17 @@ Il flusso narrativo ora rende strutturali queste regole:
 - la narrazione resta in seconda persona per il PLAYER e mantiene continuità, memoria e conseguenze persistenti.
 
 Questa logica è implementata nel runtime narrativo, non solo documentata nel prompt.
+
+## Protezione runtime del controllo del PLAYER — 30 settembre 2026
+
+La narrazione non si affida più soltanto al prompt per rispettare il controllo del protagonista.
+
+Dopo la generazione della narrazione viene eseguito un controllo deterministico sui segnali più comuni di azioni, movimenti, pensieri, decisioni o dettagli fisici inventati del PLAYER. Se viene rilevata una violazione, il testo viene riscritto una sola volta con un prompt di correzione mirato; se la violazione persiste, il turno viene bloccato invece di mostrare una narrazione non valida.
+
+Sono stati aggiunti test automatici per:
+- azioni inventate come "il tuo passo" o "ti avvicini";
+- decisioni inventate come "non hai scelto";
+- stati personali inventati come "sei qui";
+- osservazioni legittime che descrivono solo ciò che il PLAYER può vedere.
+
+Questo crea una barriera runtime aggiuntiva tra il modello e il testo mostrato al PLAYER.
