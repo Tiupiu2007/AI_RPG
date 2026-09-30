@@ -4,6 +4,17 @@ from app.game_engine.quests import active_quests, apply_quest_updates
 
 
 class NarrativeRuntimeTests(unittest.TestCase):
+    def test_action_options_are_normalized_to_four(self):
+        from app.story_chat import _format_action_options, _parse_action_options
+
+        options = _parse_action_options(["prima", "seconda"])
+        self.assertEqual(len(options), 4)
+        rendered = _format_action_options(options)
+        self.assertIn("1. **Prudente / razionale:** prima", rendered)
+        self.assertIn("2. **Aggressiva / rischiosa:** seconda", rendered)
+        self.assertIn("3. **Sociale / esplorativa:**", rendered)
+        self.assertIn("4. **Libera / creativa:**", rendered)
+        self.assertTrue(rendered.endswith("**Oppure fai quello che vuoi.**"))
     def test_quest_lifecycle_is_persistent(self):
         extra = {}
         created = apply_quest_updates(
