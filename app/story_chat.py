@@ -648,7 +648,7 @@ il nuovo NPC ha un ruolo reale nella scena o potrà essere rilevante in futuro.
 Descrivi l'identità in modo sufficiente a permettere al sistema di creare una persona coerente.
 Esempio:
 "npc_creations": [
-  {"description": "Donna umana di circa 40 anni, proprietaria della locanda, pragmatica e cordiale.", "role": "locandiera"}
+  {{"description": "Donna umana di circa 40 anni, proprietaria della locanda, pragmatica e cordiale.", "role": "locandiera"}}
 ]
 Non creare un NPC già presente nel CONTEXT.
 
