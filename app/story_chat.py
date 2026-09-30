@@ -529,7 +529,8 @@ def _format_action_options(options: list[str]) -> str:
 
 _PLAYER_CONTROL_PATTERNS = (
     r"\b(?:il tuo|la tua|i tuoi|le tue)\s+(?:passo|movimento|movimenti|sguardo|mani|braccia|gambe|capelli|viso|volto|corpo)\b",
-    r"\bti\s+(?:senti|senti?\b|muovi|muoveresti|avvicini|allontani|cammini|corri|corri?\b|giri|volti|alzi|abbassi|decidi|scegli|pensi|ricordi|provi|temi|sorridi|rabbrividisci|esiti|esci|entri|apri|chiudi)\b",
+    r"\b(?:ti\s+(?:senti|senti?\b|muovi|muoveresti|avvicini|allontani|cammini|corri|corri?\b|giri|volti|alzi|abbassi|decidi|scegli|pensi|ricordi|provi|temi|sorridi|rabbrividisci|esiti|esci|entri|apri|chiudi)|ti\s+si\s+(?:muovono|muove|alzano|abbassano))\b",
+    r"\b(?:i\s+capelli|gli\s+occhi|le\s+mani|le\s+braccia|le\s+gambe)\b[^.\n]{0,80}\bti\b",
     r"\b(?:pensi|decidi|scegli|vuoi|desideri|temi|provi|ricordi)\b",
     r"\b(?:non hai scelto|hai scelto|hai deciso|non hai deciso|sei qui|ti trovi|sei davanti|sei dietro|sei seduto|sei seduta|sei in piedi)\b",
 )
