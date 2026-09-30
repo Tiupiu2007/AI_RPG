@@ -524,7 +524,7 @@ def _format_action_options(options: list[str]) -> str:
         lines.append(f"{index + 1}. **{label}:** {text}")
     lines.append("")
     lines.append("**Oppure fai quello che vuoi.**")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 _PLAYER_CONTROL_PATTERNS = (
