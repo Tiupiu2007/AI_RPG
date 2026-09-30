@@ -15,6 +15,28 @@ class NarrativeRuntimeTests(unittest.TestCase):
         self.assertIn("3. **Sociale / esplorativa:**", rendered)
         self.assertIn("4. **Libera / creativa:**", rendered)
         self.assertTrue(rendered.endswith("**Oppure fai quello che vuoi.**"))
+    def test_narration_player_control_guard_detects_invented_state(self):
+        from app.story_chat import _narration_needs_repair
+
+        self.assertTrue(
+            _narration_needs_repair(
+                "Non hai scelto questa strada e sei qui davanti al cancello.",
+                "guardo in torno in cerca di qualcuno",
+            )
+        )
+        self.assertTrue(
+            _narration_needs_repair(
+                "Il tuo passo è leggero e ti avvicini alla porta.",
+                "guardo la porta",
+            )
+        )
+        self.assertFalse(
+            _narration_needs_repair(
+                "Guardi intorno. A pochi passi c'è una donna seduta su un gradino.",
+                "guardo in torno in cerca di qualcuno",
+            )
+        )
+
     def test_quest_lifecycle_is_persistent(self):
         extra = {}
         created = apply_quest_updates(
