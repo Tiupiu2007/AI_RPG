@@ -48,8 +48,8 @@ class NarrativeRuntimeTests(unittest.TestCase):
         )
         self.assertFalse(
             _narration_needs_repair(
-                "Donna:
-— «Ti seguo fino alla porta.»",
+                """Donna:
+— «Ti seguo fino alla porta.»""",
                 "guardo in torno",
             )
         )
