@@ -286,6 +286,9 @@ Distingui tra ciò che è immediatamente percepibile e ciò che richiede un'osse
 - Non rendere intenzionalmente enigmatici dettagli normali usando formule come "sembra quasi", "come se", "pare che", "quasi a suggerire" o descrizioni ambigue quando non c'è un fatto concreto dietro.
 - Gli elementi eccezionali devono avere una ragione narrativa e devono essere relativamente rari.
 - Non trasformare ogni osservazione del PLAYER in un indizio, presagio, minaccia o mistero.
+- Per un'azione di osservazione, non devi inventare una nuova azione del PLAYER per collegare le osservazioni: il PLAYER ha già compiuto esattamente l'azione scritta nel messaggio.
+- Se il PLAYER scrive un'azione semplice come "guardo intorno", puoi rispondere con persone, oggetti e caratteristiche normalmente visibili; non aggiungere capelli, abiti, postura, sensazioni fisiche o movimenti del PLAYER se non sono già stabiliti.
+- Frasi come "il tuo passo", "il tuo sguardo si sposta", "ti senti", "pensi", "decidi", "ti muovi", "ti avvicini" o equivalenti sono vietate quando descrivono un fatto non scritto dal PLAYER.
 - Se il PLAYER guarda una parte dell'ambiente, privilegia ciò che una persona vedrebbe normalmente: forma, materiali, dimensioni apparenti, usura, sporco, luce e oggetti presenti.
 - Non fare apparire nuovi dettagli importanti soltanto perché il PLAYER li ha già osservati in un turno precedente senza averli notati. Se un dettaglio era chiaramente visibile e rilevante, trattalo come già percepito.
 - Puoi aggiungere dettagli ordinari non ancora descritti quando il PLAYER osserva una zona più da vicino, ma devono essere compatibili con il canone.
@@ -522,6 +525,81 @@ def _format_action_options(options: list[str]) -> str:
     lines.append("")
     lines.append("**Oppure fai quello che vuoi.**")
     return "\\n".join(lines)
+
+
+_PLAYER_CONTROL_PATTERNS = (
+    r"\b(?:il tuo|la tua|i tuoi|le tue)\s+(?:passo|movimento|movimenti|sguardo|mani|braccia|gambe|capelli|viso|volto|corpo)\b",
+    r"\bti\s+(?:senti|senti?\b|muovi|muoveresti|avvicini|allontani|cammini|corri|corri?\b|giri|volti|alzi|abbassi|decidi|scegli|pensi|ricordi|provi|temi|sorridi|rabbrividisci|esiti|esci|entri|apri|chiudi)\b",
+    r"\b(?:pensi|decidi|scegli|vuoi|desideri|temi|provi|ricordi)\b",
+)
+
+def _narration_needs_repair(narration: str, player_message: str) -> bool:
+    """Individua i segnali più comuni di controllo non autorizzato del PLAYER."""
+    text = " ".join(str(narration).split()).casefold()
+    message = " ".join(str(player_message).split()).casefold()
+
+    # Non blocchiamo una frase che ripete chiaramente un'azione già dichiarata
+    # dal PLAYER. Il controllo serve a intercettare azioni aggiuntive inventate.
+    for pattern in _PLAYER_CONTROL_PATTERNS:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            fragment = match.group(0).casefold()
+            if fragment in message:
+                continue
+            return True
+    return False
+
+
+def _repair_narration(
+    context: dict,
+    history: list[dict],
+    player_message: str,
+    action: dict,
+    engine_result: dict,
+    narration: str,
+) -> str:
+    """Chiede una sola riscrittura mirata quando la prima narrazione controlla il PLAYER."""
+    repair_prompt = _narration_prompt(context, history, player_message, action, engine_result)
+    repair_prompt += """
+
+CONTROLLO DI SICUREZZA OBBLIGATORIO
+La bozza precedente ha violato il controllo del PLAYER.
+Riscrivila da zero.
+
+VINCOLI:
+- Non descrivere nessun movimento, gesto, postura, aspetto, pensiero, emozione,
+  intenzione o decisione del PLAYER oltre a ciò che è scritto esplicitamente nel
+  messaggio del PLAYER o determinato dal GAME ENGINE.
+- Non usare dettagli fisici del PLAYER se non presenti nel CONTEXT.
+- Non aggiungere un secondo movimento del PLAYER dopo l'azione dichiarata.
+- Se il PLAYER ha osservato qualcosa, descrivi esclusivamente ciò che è
+  plausibilmente osservabile in quel momento.
+- Non trasformare un'osservazione in una scoperta automatica di segreti, magia,
+  presagi o misteri.
+- Gli NPC possono agire autonomamente e parlare, ma il PLAYER deve fermarsi
+  esattamente dopo la conseguenza dell'azione già eseguita.
+- Le quattro possibilità finali devono restare solo possibilità future.
+"""
+    raw = ask_ollama(
+        repair_prompt,
+        json.dumps(
+            {
+                "player_message": player_message,
+                "action": action,
+                "engine_result": engine_result,
+                "previous_narration": narration,
+                "instruction": "Correggi esclusivamente la violazione del controllo del PLAYER e restituisci lo stesso JSON previsto.",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ValueError("L'IA non ha restituito un JSON valido durante la correzione della narrazione.") from error
+    repaired = parsed.get("narration")
+    if not isinstance(repaired, str) or not repaired.strip():
+        raise ValueError("La correzione AI non ha restituito una narrazione valida.")
+    return repaired.strip()
 
 
 def _narration_prompt(
@@ -766,6 +844,24 @@ def story_turn(character_id: int, player_message: str):
     if not isinstance(narration, str) or not narration.strip():
         raise ValueError("L'IA non ha restituito una narrazione valida.")
     narration = narration.strip()
+
+    # Il prompt è una prima barriera; questa seconda barriera controlla
+    # concretamente il testo restituito e forza una riscrittura se l'AI ha
+    # comunque inventato un'azione/stato del PLAYER.
+    if _narration_needs_repair(narration, message):
+        narration = _repair_narration(
+            context,
+            history,
+            message,
+            action,
+            engine_result,
+            narration,
+        )
+        if _narration_needs_repair(narration, message):
+            raise ValueError(
+                "La narrazione AI continua a contenere un'azione o uno stato "
+                "non autorizzato del PLAYER dopo la correzione."
+            )
 
     action_options = _parse_action_options(narration_result.get("action_options"))
     narration = narration.rstrip() + "\\n\\n" + _format_action_options(action_options)
