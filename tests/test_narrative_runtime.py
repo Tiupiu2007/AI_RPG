@@ -37,6 +37,29 @@ class NarrativeRuntimeTests(unittest.TestCase):
             )
         )
 
+    def test_narration_guard_ignores_npc_dialogue(self):
+        from app.story_chat import _narration_needs_repair
+
+        self.assertFalse(
+            _narration_needs_repair(
+                "La donna ti guarda.",
+                "guardo in torno",
+            )
+        )
+        self.assertFalse(
+            _narration_needs_repair(
+                "Donna:
+— «Ti seguo fino alla porta.»",
+                "guardo in torno",
+            )
+        )
+        self.assertTrue(
+            _narration_needs_repair(
+                "Ti avvicini alla porta.",
+                "guardo la porta",
+            )
+        )
+
     def test_quest_lifecycle_is_persistent(self):
         extra = {}
         created = apply_quest_updates(
