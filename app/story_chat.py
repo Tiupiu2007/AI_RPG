@@ -535,12 +535,27 @@ _PLAYER_CONTROL_PATTERNS = (
 )
 
 def _narration_needs_repair(narration: str, player_message: str) -> bool:
-    """Individua i segnali più comuni di controllo non autorizzato del PLAYER."""
-    text = " ".join(str(narration).split()).casefold()
+    """Individua controllo non autorizzato del PLAYER senza analizzare i dialoghi NPC."""
+    raw = str(narration or "")
     message = " ".join(str(player_message).split()).casefold()
 
-    # Non blocchiamo una frase che ripete chiaramente un'azione già dichiarata
-    # dal PLAYER. Il controllo serve a intercettare azioni aggiuntive inventate.
+    # I dialoghi degli NPC possono contenere naturalmente frasi come
+    # "ti seguo", "sei qui", "ti senti..." e non rappresentano azioni del PLAYER.
+    # Il controllo deve quindi esaminare soltanto la voce narrativa.
+    prose_lines = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("—"):
+            continue
+        # Formato dialogo fissato: Nome: / — «...».
+        if stripped.endswith(":") and len(stripped) < 80:
+            continue
+        prose_lines.append(stripped)
+
+    text = " ".join(prose_lines).casefold()
+
     for pattern in _PLAYER_CONTROL_PATTERNS:
         for match in re.finditer(pattern, text, re.IGNORECASE):
             fragment = match.group(0).casefold()
