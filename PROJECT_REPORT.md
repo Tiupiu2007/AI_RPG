@@ -541,3 +541,19 @@ La storia non parte più scegliendo un personaggio usa-e-getta. Il progetto ora 
 - `Nuova storia` resetta il contenitore della campagna, non la vita del protagonista.
 
 Questo mantiene la regola architetturale: **il giocatore controlla il protagonista; il mondo appartiene al narratore; lo stato autorevole appartiene al game engine.**
+
+## Comportamento narrativo fissato — 30 settembre 2026
+
+Il flusso narrativo ora rende strutturali queste regole:
+
+- il PLAYER controlla esclusivamente il proprio protagonista;
+- ogni turno porta avanti solo l'azione dichiarata dal PLAYER e le sue conseguenze immediate;
+- il narratore non aggiunge una seconda azione, decisione, dialogo, pensiero o intenzione del PLAYER;
+- gli NPC possono agire autonomamente in base a personalità, conoscenze, relazioni, posizione e obiettivi;
+- le possibilità mostrate alla fine del turno sono solo suggerimenti futuri e non vengono mai eseguite automaticamente;
+- ogni risposta termina con quattro possibilità: Prudente / razionale, Aggressiva / rischiosa, Sociale / esplorativa, Libera / creativa, seguite da "Oppure fai quello che vuoi.";
+- la quarta possibilità mantiene sempre una via completamente libera per il PLAYER;
+- le possibilità sono generate in base alla situazione corrente e non costituiscono un menu obbligatorio;
+- la narrazione resta in seconda persona per il PLAYER e mantiene continuità, memoria e conseguenze persistenti.
+
+Questa logica è implementata nel runtime narrativo, non solo documentata nel prompt.
