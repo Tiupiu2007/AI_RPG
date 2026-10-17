@@ -119,6 +119,13 @@ class NarrativeRuntimeTests(unittest.TestCase):
         )
         self.assertIn("turno è stato salvato", generic)
 
+        talk = _fallback_narration(
+            {"type": "talk", "target_text": "l'uomo con la maschera"},
+            {"valid": True, "executed": True, "changes": {}},
+        )
+        self.assertIn("l'uomo con la maschera", talk)
+        self.assertIn("dialogo resta in sospeso", talk)
+
 
     def test_system_prompt_routes_direct_npc_dialogue_to_talk_action(self):
         from app.story_chat import _build_system_prompt
@@ -127,6 +134,7 @@ class NarrativeRuntimeTests(unittest.TestCase):
         self.assertIn("usa `talk`", prompt)
         self.assertIn("indica il suo `target_id`", prompt)
         self.assertIn("senza inventare ID", prompt)
+        self.assertIn("SCELTA NUMERICA DEL PLAYER", prompt)
 
     def test_social_updates_require_successful_talk_action(self):
         from app.story_chat import _social_update_matches_action
