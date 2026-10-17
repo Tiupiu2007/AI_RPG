@@ -790,7 +790,6 @@ def _fallback_narration(action: dict, engine_result: dict) -> str:
     if action_type == "interact":
         return "L'interazione è stata registrata. La descrizione dettagliata non è disponibile in questo momento."
     return "Il turno è stato salvato, ma il narratore non è disponibile. Puoi continuare la partita."
-}
 
 
 def story_turn(character_id: int, player_message: str):
