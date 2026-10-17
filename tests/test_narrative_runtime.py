@@ -94,6 +94,35 @@ class NarrativeRuntimeTests(unittest.TestCase):
         self.assertEqual(extra["quests"][0]["status"], "completed")
 
 
+    def test_social_updates_require_successful_talk_action(self):
+        from app.story_chat import _social_update_matches_action
+
+        action = {"type": "talk", "target_id": 22}
+        update = {"character_id": 22, "social_effects": {"trust": 2}}
+
+        self.assertTrue(
+            _social_update_matches_action(
+                action, {"valid": True, "executed": True}, update
+            )
+        )
+        self.assertFalse(
+            _social_update_matches_action(
+                action, {"valid": False, "executed": False}, update
+            )
+        )
+        self.assertFalse(
+            _social_update_matches_action(
+                action, {"valid": True, "executed": False}, update
+            )
+        )
+        self.assertFalse(
+            _social_update_matches_action(
+                {"type": "inspect", "target_id": 22},
+                {"valid": True, "executed": True},
+                update,
+            )
+        )
+
     def test_turn_without_active_campaign_does_not_advance_world(self):
         from app.story_chat import story_turn
 
