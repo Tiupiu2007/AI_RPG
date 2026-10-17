@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
 
 
@@ -27,6 +28,23 @@ class BiomeRegion:
     radius: float
     transition_radius: float = 0.0
     attributes: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.region_id, str) or not self.region_id.strip():
+            raise ValueError("L'identificativo della regione del bioma non può essere vuoto.")
+        if not isinstance(self.biome_id, str) or not self.biome_id.strip():
+            raise ValueError("L'identificativo del bioma non può essere vuoto.")
+        self.center = _coordinates(self.center)
+        self.radius = _positive(self.radius, "radius")
+        try:
+            transition_radius = float(self.transition_radius)
+        except (TypeError, ValueError) as error:
+            raise ValueError("transition_radius deve essere finito e non negativo.") from error
+        if not isfinite(transition_radius) or transition_radius < 0:
+            raise ValueError("transition_radius deve essere finito e non negativo.")
+        self.transition_radius = transition_radius
+        if not isinstance(self.attributes, dict):
+            raise TypeError("Gli attributi della regione del bioma devono essere un dizionario.")
 
     def contains(self, coordinates: dict[str, float]) -> bool:
         return _distance(self.center, coordinates) <= self.radius
@@ -71,6 +89,10 @@ class BiomeMap:
     regions: dict[str, BiomeRegion] = field(default_factory=dict)
 
     def add_definition(self, biome: BiomeDefinition) -> None:
+        if not isinstance(biome.biome_id, str) or not biome.biome_id.strip():
+            raise ValueError("L'identificativo del bioma non può essere vuoto.")
+        if not isinstance(biome.name, str) or not biome.name.strip():
+            raise ValueError("Il nome del bioma non può essere vuoto.")
         if biome.biome_id in self.definitions:
             raise ValueError(f"Il bioma '{biome.biome_id}' esiste già.")
         self.definitions[biome.biome_id] = biome
@@ -149,12 +171,18 @@ def _distance(first: dict[str, float], second: dict[str, float]) -> float:
 def _coordinates(value: Any) -> dict[str, float]:
     if not isinstance(value, dict) or "x" not in value or "y" not in value:
         raise ValueError("Una regione deve avere coordinate x e y.")
-    return {"x": float(value["x"]), "y": float(value["y"])}
+    try:
+        x, y = float(value["x"]), float(value["y"])
+    except (TypeError, ValueError) as error:
+        raise ValueError("Le coordinate del bioma devono essere numeriche e finite.") from error
+    if not isfinite(x) or not isfinite(y):
+        raise ValueError("Le coordinate del bioma devono essere numeriche e finite.")
+    return {"x": x, "y": y}
 
 
 def _positive(value: Any, field_name: str) -> float:
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-        raise ValueError(f"{field_name} deve essere positivo.")
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value) or value <= 0:
+        raise ValueError(f"{field_name} deve essere finito e positivo.")
     return float(value)
 
 
