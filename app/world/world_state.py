@@ -171,9 +171,25 @@ class WorldState:
     ) -> ActorPosition:
         position = self.require_actor_position(actor_id)
         self.require_location(destination_id)
+        if position.is_traveling:
+            raise ValueError("L'attore è già in viaggio.")
+        if not route_ids:
+            raise ValueError("Un viaggio deve avere almeno una rotta.")
+
+        current_location_id = position.location_id
         for route_id in route_ids:
-            if self.get_route(route_id) is None:
+            route = self.get_route(route_id)
+            if route is None:
                 raise KeyError(f"Rotta non trovata: {route_id}")
+            if not route.available:
+                raise ValueError(f"La rotta '{route_id}' non è disponibile.")
+            if route.origin_id != current_location_id:
+                raise ValueError("Le rotte non formano un percorso continuo dalla posizione attuale.")
+            current_location_id = route.destination_id
+
+        if current_location_id != destination_id:
+            raise ValueError("Il percorso non termina nella destinazione richiesta.")
+
         position.begin_travel(destination_id, route_ids)
         self.update()
         return position
