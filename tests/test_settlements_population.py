@@ -179,3 +179,40 @@ def test_production_rule_without_positive_inputs_cannot_generate_free_goods():
         pass
     else:
         raise AssertionError("A production rule generated goods without consuming resources")
+
+
+def test_production_rejects_non_finite_quantities_and_invalid_cycle_counts():
+    for invalid in (float("nan"), float("inf"), float("-inf")):
+        try:
+            ProductionRule.create("Invalid", {"ore": invalid}, {"iron": 1})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Non-finite production input accepted: {invalid!r}")
+
+    rule = ProductionRule.create("Smelt", {"ore": 2}, {"iron": 1})
+    for cycles in (-1, 1.5, True):
+        try:
+            rule.apply({"ore": 10}, cycles=cycles)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid cycle count accepted: {cycles!r}")
+
+
+def test_trade_route_rejects_non_finite_or_negative_values():
+    for invalid in (float("nan"), float("inf"), float("-inf"), -1):
+        try:
+            TradeRoute.create("origin", "destination", goods={"iron": invalid})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid goods quantity accepted: {invalid!r}")
+
+    for field, value in (("travel_hours", float("inf")), ("tariff", float("nan"))):
+        try:
+            TradeRoute.create("origin", "destination", **{field: value})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid {field} accepted: {value!r}")
