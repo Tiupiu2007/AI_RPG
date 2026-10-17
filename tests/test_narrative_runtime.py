@@ -188,7 +188,7 @@ class NarrativeRuntimeTests(unittest.TestCase):
 
         self.assertIn("turno è stato salvato", result["narration"])
         self.assertEqual(len(result["action_options"]), 4)
-        self.assertIn("\\n\\n1. **Prudente / razionale:**", result["narration"])
+        self.assertIn("\n\n1. **Prudente / razionale:**", result["narration"])
         self.assertEqual(len(character["extra"]["story_chat"]), 2)
         self.assertEqual(save_mock.call_count, 2)
         self.assertEqual(result["event_id"], 202)
