@@ -7,9 +7,9 @@ from app.world.world_state import WorldState
 
 def build_world():
     world = WorldState.create("Test World")
-    a = Location.create("A", coordinates={"x": 0, "y": 0})
-    b = Location.create("B", coordinates={"x": 10, "y": 0})
-    c = Location.create("C", coordinates={"x": 20, "y": 0})
+    a = Location.create("A", "area", coordinates={"x": 0, "y": 0})
+    b = Location.create("B", "area", coordinates={"x": 10, "y": 0})
+    c = Location.create("C", "area", coordinates={"x": 20, "y": 0})
     world.add_location(a)
     world.add_location(b)
     world.add_location(c)
@@ -20,8 +20,8 @@ def build_world():
 
 def test_route_cannot_be_shorter_than_coordinates():
     world = WorldState.create("Geometry")
-    a = Location.create("A", coordinates={"x": 0, "y": 0})
-    b = Location.create("B", coordinates={"x": 10, "y": 0})
+    a = Location.create("A", "area", coordinates={"x": 0, "y": 0})
+    b = Location.create("B", "area", coordinates={"x": 10, "y": 0})
     world.add_location(a)
     world.add_location(b)
     try:
@@ -45,7 +45,7 @@ def test_movement_uses_persisted_origin_and_updates_time_and_position():
 
 def test_unreachable_destination_does_not_change_position():
     world, a, b, c = build_world()
-    isolated = Location.create("D", coordinates={"x": 100, "y": 0})
+    isolated = Location.create("D", "area", coordinates={"x": 100, "y": 0})
     world.add_location(isolated)
     world.set_actor_position("hero", a.location_id)
     engine = MovementEngine(world)
