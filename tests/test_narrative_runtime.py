@@ -94,6 +94,31 @@ class NarrativeRuntimeTests(unittest.TestCase):
         self.assertEqual(extra["quests"][0]["status"], "completed")
 
 
+    def test_fallback_narration_reports_saved_action_without_inventing_outcomes(self):
+        from app.story_chat import _fallback_narration
+
+        rejected = _fallback_narration(
+            {"type": "attack"},
+            {"valid": False, "executed": False, "reason": "Bersaglio assente."},
+        )
+        self.assertIn("Bersaglio assente", rejected)
+
+        moved = _fallback_narration(
+            {"type": "move"},
+            {
+                "valid": True,
+                "executed": True,
+                "changes": {"location": {"to": "loc_taverna", "name": "Taverna"}},
+            },
+        )
+        self.assertIn("Taverna", moved)
+
+        generic = _fallback_narration(
+            {"type": "none"},
+            {"valid": True, "executed": True, "changes": {}},
+        )
+        self.assertIn("turno è stato salvato", generic)
+
     def test_social_updates_require_successful_talk_action(self):
         from app.story_chat import _social_update_matches_action
 
