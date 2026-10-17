@@ -108,3 +108,46 @@ def test_travel_cannot_start_twice():
     except ValueError:
         return
     raise AssertionError("Movement started while actor was already traveling")
+
+
+def test_begin_actor_travel_rejects_route_path_that_does_not_reach_destination():
+    world, a, b, c = build_world()
+    world.set_actor_position("hero", a.location_id)
+    route_to_b = next(
+        route for route in world.geography.routes.values()
+        if route.origin_id == a.location_id and route.destination_id == b.location_id
+    )
+    initial_updated_at = world.updated_at
+
+    try:
+        world.begin_actor_travel("hero", c.location_id, (route_to_b.route_id,))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("A route path ending at the wrong location was accepted")
+
+    position = world.require_actor_position("hero")
+    assert position.location_id == a.location_id
+    assert not position.is_traveling
+    assert position.destination_id is None
+    assert world.updated_at == initial_updated_at
+
+
+def test_begin_actor_travel_rejects_unavailable_route_without_mutating_position():
+    world, a, b, _ = build_world()
+    world.set_actor_position("hero", a.location_id)
+    route = next(iter(world.geography.routes.values()))
+    route.set_available(False)
+    initial_updated_at = world.updated_at
+
+    try:
+        world.begin_actor_travel("hero", b.location_id, (route.route_id,))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("An unavailable route was accepted for travel")
+
+    position = world.require_actor_position("hero")
+    assert position.location_id == a.location_id
+    assert not position.is_traveling
+    assert world.updated_at == initial_updated_at
