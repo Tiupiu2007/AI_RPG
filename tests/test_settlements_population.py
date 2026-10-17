@@ -294,3 +294,68 @@ def test_racial_territories_reject_non_finite_values():
             else:
                 raise AssertionError(f"Non-finite territory value accepted: {kwargs!r}")
 
+
+def test_economy_overflow_is_rejected_without_mutation():
+    resource = ResourceNode.create("iron", 1e308, regeneration_rate=1e308)
+    before = resource.amount
+    try:
+        resource.advance(2)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Resource regeneration overflow was accepted")
+    assert resource.amount == before
+
+    market = Market.create("loc-1")
+    market.set_supply("iron", 1e-308)
+    market.set_demand("iron", 1e308)
+    try:
+        market.update_price_from_supply_demand("iron", base_price=1e308, sensitivity=1e308)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Overflowing market price was accepted")
+    assert market.prices == {}
+
+
+def test_market_loading_rejects_non_finite_saved_prices():
+    data = {
+        "market_id": "market-1",
+        "location_id": "loc-1",
+        "prices": {"iron": float("nan")},
+        "supply": {},
+        "demand": {},
+    }
+    try:
+        Market.from_dict(data)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("A market with a non-finite saved price was loaded")
+
+
+def test_world_loading_rejects_missing_region_references():
+    world = WorldState.create("Region integrity")
+    region = Region.create("Parent", x_min=0, x_max=10, y_min=0, y_max=10)
+    world.add_region(region)
+    territory = RacialTerritory.create("Elf", "Forest", concentration=0.8, x_min=0, x_max=5, y_min=0, y_max=5, region_id=region.region_id)
+    world.add_racial_territory(territory)
+    data = world.to_dict()
+    data["regions"]["regions"][region.region_id]["parent_region_id"] = "missing-parent"
+
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "genitore" in str(error)
+    else:
+        raise AssertionError("A region with a missing parent was loaded")
+
+    data = world.to_dict()
+    data["regions"]["racial_territories"][territory.territory_id]["region_id"] = "missing-region"
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "territorio razziale" in str(error)
+    else:
+        raise AssertionError("A racial territory with a missing region was loaded")
+
