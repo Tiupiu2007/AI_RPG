@@ -82,6 +82,8 @@ class WorldState:
             raise ValueError("Impossibile rimuovere una località che contiene un insediamento.")
         if any(route.origin_id == location_id or route.destination_id == location_id for route in self.geography.routes.values()):
             raise ValueError("Impossibile rimuovere una località collegata a una rotta.")
+        if any(route.origin_id == location_id or route.destination_id == location_id for route in self.trade.routes.values()):
+            raise ValueError("Impossibile rimuovere una località collegata a una rotta commerciale.")
         for actor_id, position in list(self.actor_positions.items()):
             if position.location_id == location_id or position.destination_id == location_id:
                 raise ValueError(f"Impossibile rimuovere una località usata dall'attore '{actor_id}'.")
