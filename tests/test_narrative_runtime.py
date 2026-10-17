@@ -148,6 +148,49 @@ class NarrativeRuntimeTests(unittest.TestCase):
             )
         )
 
+
+    def test_full_turn_survives_narrator_failure_after_action_is_saved(self):
+        import json
+        from types import SimpleNamespace
+        from app import story_chat
+
+        character = {
+            "id": 17,
+            "identity": SimpleNamespace(name="Nox"),
+            "languages": [],
+            "extra": {"campaign": {"started": True}, "game_state": {"turn": 0}},
+        }
+        engine_result = {
+            "valid": True,
+            "executed": True,
+            "action": {"type": "none", "target_id": None, "target_text": None, "parameters": {}},
+            "changes": {},
+        }
+        with patch.object(story_chat, "get_character", return_value=character), \\
+             patch.object(story_chat, "_build_context", return_value={}), \\
+             patch.object(story_chat, "_build_system_prompt", return_value="intent prompt"), \\
+             patch.object(story_chat, "_narration_prompt", return_value="narration prompt"), \\
+             patch.object(story_chat, "ask_ollama", side_effect=[
+                 json.dumps({"action": {"type": "none"}}),
+                 RuntimeError("Ollama stopped"),
+             ]), \\
+             patch.object(story_chat, "advance_turn"), \\
+             patch.object(story_chat, "advance_world", return_value=1), \\
+             patch.object(story_chat, "execute_action", return_value=engine_result), \\
+             patch.object(story_chat, "save_character") as save_mock, \\
+             patch.object(story_chat, "record_world_event", return_value=101), \\
+             patch.object(story_chat, "create_event", return_value=202), \\
+             patch.object(story_chat, "_narration_needs_repair", return_value=False), \\
+             patch("app.game_engine.progression.apply_progression", return_value=None):
+            result = story_chat.story_turn(17, "Guardo la stanza.")
+
+        self.assertIn("turno è stato salvato", result["narration"])
+        self.assertEqual(len(result["action_options"]), 4)
+        self.assertIn("\\n\\n1. **Prudente / razionale:**", result["narration"])
+        self.assertEqual(len(character["extra"]["story_chat"]), 2)
+        self.assertEqual(save_mock.call_count, 2)
+        self.assertEqual(result["event_id"], 202)
+
     def test_turn_without_active_campaign_does_not_advance_world(self):
         from app.story_chat import story_turn
 
