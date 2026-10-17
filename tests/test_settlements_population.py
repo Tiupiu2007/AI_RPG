@@ -3,7 +3,8 @@ from app.world.demography import DemographicState
 from app.world.population import Population, PopulationGroup
 from app.world.regions import Region
 from app.world.settlements import Settlement
-from app.world.trade import TradeRoute
+from app.world.economy import Market, ResourceNode
+from app.world.trade import ProductionRule, TradeRoute
 from app.world.world_state import WorldState
 
 
@@ -136,3 +137,45 @@ def test_location_cannot_be_removed_while_trade_route_references_it():
 
     assert world.get_location(origin.location_id) is origin
     assert route.route_id in world.trade.routes
+
+
+
+def test_location_cannot_be_removed_while_economy_references_it():
+    world = WorldState.create("Economy integrity")
+    location = Location.create("Mine", "town")
+    world.add_location(location)
+    resource = ResourceNode.create("iron", 100, location_id=location.location_id)
+    world.economy.add_resource(resource)
+
+    try:
+        world.remove_location(location.location_id)
+    except ValueError as error:
+        assert "risorse" in str(error)
+    else:
+        raise AssertionError("A location referenced by a resource was removed")
+
+    assert world.get_location(location.location_id) is location
+    world.economy.resources.pop(resource.resource_id)
+
+    market = Market.create(location.location_id)
+    world.economy.add_market(market)
+    try:
+        world.remove_location(location.location_id)
+    except ValueError as error:
+        assert "mercato" in str(error)
+    else:
+        raise AssertionError("A location hosting a market was removed")
+
+    assert world.get_location(location.location_id) is location
+
+
+def test_production_rule_without_positive_inputs_cannot_generate_free_goods():
+    rule = ProductionRule.create("Free iron", {"ore": 0}, {"iron": 1})
+
+    assert rule.max_cycles({"ore": 100}) == 0
+    try:
+        rule.apply({"ore": 100}, cycles=1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("A production rule generated goods without consuming resources")
