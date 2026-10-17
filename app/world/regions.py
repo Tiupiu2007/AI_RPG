@@ -29,9 +29,17 @@ class Region:
     def create(cls, name: str, *, region_type: str = "region", description: str = "", x_min: float, x_max: float, y_min: float, y_max: float, parent_region_id: str | None = None, biome_ids: list[str] | None = None, region_id: str | None = None, metadata: dict[str, Any] | None = None) -> "Region":
         if not isinstance(name, str) or not name.strip():
             raise ValueError("La regione deve avere un nome.")
+        try:
+            x_min, x_max, y_min, y_max = map(float, (x_min, x_max, y_min, y_max))
+        except (TypeError, ValueError) as error:
+            raise ValueError("I limiti della regione devono essere numerici.") from error
+        if not all(math.isfinite(value) for value in (x_min, x_max, y_min, y_max)):
+            raise ValueError("I limiti della regione devono essere finiti.")
         if x_max <= x_min or y_max <= y_min:
             raise ValueError("I limiti della regione non sono validi.")
-        return cls(region_id or str(uuid.uuid4()), name.strip(), region_type.strip(), description.strip(), float(x_min), float(x_max), float(y_min), float(y_max), parent_region_id, list(biome_ids or []), [], dict(metadata or {}))
+        if not isinstance(region_type, str) or not region_type.strip():
+            raise ValueError("Il tipo di regione deve essere valido.")
+        return cls(region_id or str(uuid.uuid4()), name.strip(), region_type.strip(), description.strip(), x_min, x_max, y_min, y_max, parent_region_id, list(biome_ids or []), [], dict(metadata or {}))
 
     def contains(self, coordinates: dict[str, float]) -> bool:
         x, y = _xy(coordinates)
@@ -66,13 +74,19 @@ class RacialTerritory:
 
     @classmethod
     def create(cls, race: str, name: str, *, concentration: float, x_min: float, x_max: float, y_min: float, y_max: float, region_id: str | None = None, territory_id: str | None = None, metadata: dict[str, Any] | None = None) -> "RacialTerritory":
-        if not race.strip() or not name.strip():
+        if not isinstance(race, str) or not race.strip() or not isinstance(name, str) or not name.strip():
             raise ValueError("Razza e territorio devono avere un nome.")
-        if not 0.0 <= concentration <= 1.0:
-            raise ValueError("La concentrazione deve essere compresa tra 0 e 1.")
+        try:
+            concentration, x_min, x_max, y_min, y_max = map(float, (concentration, x_min, x_max, y_min, y_max))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Concentrazione e limiti del territorio devono essere numerici.") from error
+        if not math.isfinite(concentration) or not 0.0 <= concentration <= 1.0:
+            raise ValueError("La concentrazione deve essere finita e compresa tra 0 e 1.")
+        if not all(math.isfinite(value) for value in (x_min, x_max, y_min, y_max)):
+            raise ValueError("I limiti del territorio devono essere finiti.")
         if x_max <= x_min or y_max <= y_min:
             raise ValueError("I limiti del territorio non sono validi.")
-        return cls(territory_id or str(uuid.uuid4()), race.strip(), name.strip(), float(concentration), float(x_min), float(x_max), float(y_min), float(y_max), region_id, dict(metadata or {}))
+        return cls(territory_id or str(uuid.uuid4()), race.strip(), name.strip(), concentration, x_min, x_max, y_min, y_max, region_id, dict(metadata or {}))
 
     def contains(self, coordinates: dict[str, float]) -> bool:
         x, y = _xy(coordinates)
@@ -138,6 +152,9 @@ class RegionMap:
 
 def _xy(coordinates: dict[str, float]) -> tuple[float, float]:
     try:
-        return float(coordinates["x"]), float(coordinates["y"])
+        x, y = float(coordinates["x"]), float(coordinates["y"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("Le coordinate devono contenere x e y numerici.") from error
+    if not math.isfinite(x) or not math.isfinite(y):
+        raise ValueError("Le coordinate devono essere finite.")
+    return x, y
