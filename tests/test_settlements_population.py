@@ -2,6 +2,7 @@ from app.world.locations import Location
 from app.world.population import Population, PopulationGroup
 from app.world.regions import Region
 from app.world.settlements import Settlement
+from app.world.trade import TradeRoute
 from app.world.world_state import WorldState
 
 
@@ -65,3 +66,23 @@ def test_location_cannot_be_removed_while_it_has_settlement():
     except ValueError:
         return
     raise AssertionError("A location with a settlement was removed")
+
+
+def test_location_cannot_be_removed_while_trade_route_references_it():
+    world = WorldState.create("Trade integrity")
+    origin = Location.create("Origin", "town")
+    destination = Location.create("Destination", "town")
+    world.add_location(origin)
+    world.add_location(destination)
+    route = TradeRoute.create(origin.location_id, destination.location_id)
+    world.add_trade_route(route)
+
+    try:
+        world.remove_location(origin.location_id)
+    except ValueError as error:
+        assert "commerciale" in str(error)
+    else:
+        raise AssertionError("A location referenced by a trade route was removed")
+
+    assert world.get_location(origin.location_id) is origin
+    assert route.route_id in world.trade.routes
