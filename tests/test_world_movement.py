@@ -1,4 +1,4 @@
-from app.world.biomes import Biome, BiomeMap
+from app.world.biomes import BiomeDefinition, BiomeMap, BiomeRegion
 from app.world.geography import Route
 from app.world.locations import Location
 from app.world.movement import MovementEngine
@@ -60,10 +60,30 @@ def test_unreachable_destination_does_not_change_position():
 
 
 def test_world_roundtrip_preserves_geography_biomes_and_position():
-    world, a, b, _ = build_world()
+    world, a, b, c = build_world()
     biome_map = BiomeMap()
-    biome_map.add_biome(Biome.create("plain", "Pianura", "grass", x_min=-1, x_max=11, y_min=-1, y_max=1))
-    biome_map.add_biome(Biome.create("forest", "Foresta", "forest", x_min=11, x_max=21, y_min=-1, y_max=1))
+    biome_map.add_definition(
+        BiomeDefinition(biome_id="plain", name="Pianura", terrain="grass")
+    )
+    biome_map.add_definition(
+        BiomeDefinition(biome_id="forest", name="Foresta", terrain="forest")
+    )
+    biome_map.add_region(
+        BiomeRegion(
+            region_id="plain-region",
+            biome_id="plain",
+            center={"x": 5, "y": 0},
+            radius=6,
+        )
+    )
+    biome_map.add_region(
+        BiomeRegion(
+            region_id="forest-region",
+            biome_id="forest",
+            center={"x": 20, "y": 0},
+            radius=2,
+        )
+    )
     world.biomes = biome_map
     world.set_actor_position("hero", a.location_id)
     raw = world.to_dict()
@@ -73,6 +93,7 @@ def test_world_roundtrip_preserves_geography_biomes_and_position():
     assert restored.require_actor_position("hero").location_id == a.location_id
     assert restored.biomes.biome_at(a.coordinates) == "plain"
     assert restored.biomes.biome_at(b.coordinates) == "plain"
+    assert restored.biomes.biome_at(c.coordinates) == "forest"
 
 
 def test_travel_cannot_start_twice():
