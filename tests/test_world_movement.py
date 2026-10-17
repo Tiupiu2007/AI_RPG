@@ -110,6 +110,35 @@ def test_travel_cannot_start_twice():
     raise AssertionError("Movement started while actor was already traveling")
 
 
+def test_set_actor_position_cannot_teleport_actor_during_travel():
+    world, a, b, _ = build_world()
+    world.set_actor_position("hero", a.location_id)
+    position = world.require_actor_position("hero")
+    route_to_b = next(
+        route for route in world.geography.routes.values()
+        if route.origin_id == a.location_id and route.destination_id == b.location_id
+    )
+    world.begin_actor_travel("hero", b.location_id, (route_to_b.route_id,))
+    initial_updated_at = world.updated_at
+    initial_destination = position.destination_id
+    initial_routes = position.route_ids
+
+    try:
+        world.set_actor_position("hero", b.location_id)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("An actor was repositioned while traveling")
+
+    current = world.require_actor_position("hero")
+    assert current is position
+    assert current.location_id == a.location_id
+    assert current.is_traveling
+    assert current.destination_id == initial_destination == b.location_id
+    assert current.route_ids == initial_routes == (route_to_b.route_id,)
+    assert world.updated_at == initial_updated_at
+
+
 def test_begin_actor_travel_rejects_route_path_that_does_not_reach_destination():
     world, a, b, c = build_world()
     world.set_actor_position("hero", a.location_id)
