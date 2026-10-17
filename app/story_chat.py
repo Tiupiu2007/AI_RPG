@@ -789,7 +789,16 @@ def _fallback_narration(action: dict, engine_result: dict) -> str:
         item = next(iter(removed), None)
         return f"Hai usato {item}." if item else "L'uso dell'oggetto è stato completato."
     if action_type == "talk":
-        return "Il dialogo è stato elaborato dal sistema di gioco."
+        target = action.get("target_text")
+        if isinstance(target, str) and target.strip():
+            return (
+                f"Ti rivolgi a {target.strip()}, ma il narratore non è riuscito a generare "
+                "la risposta. Il dialogo resta in sospeso: non è stata inventata una risposta dell'interlocutore."
+            )
+        return (
+            "Hai avviato il dialogo, ma il narratore non è riuscito a generare la risposta. "
+            "Il dialogo resta in sospeso: non è stata inventata una risposta dell'interlocutore."
+        )
     if action_type in {"attack", "defend", "cast_magic", "flee"}:
         return "L'azione di combattimento è stata elaborata e lo stato è stato salvato."
     if action_type == "inspect":
