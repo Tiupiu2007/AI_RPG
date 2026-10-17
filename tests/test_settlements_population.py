@@ -359,3 +359,29 @@ def test_world_loading_rejects_missing_region_references():
     else:
         raise AssertionError("A racial territory with a missing region was loaded")
 
+
+def test_world_loading_rejects_region_cycles_and_missing_biomes():
+    world = WorldState.create("Region graph integrity")
+    first = Region.create("First", x_min=0, x_max=10, y_min=0, y_max=10)
+    second = Region.create("Second", x_min=10, x_max=20, y_min=0, y_max=10, parent_region_id=first.region_id)
+    world.add_region(first)
+    world.add_region(second)
+
+    data = world.to_dict()
+    data["regions"]["regions"][first.region_id]["parent_region_id"] = second.region_id
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "ciclo" in str(error).lower()
+    else:
+        raise AssertionError("A cyclic region hierarchy was loaded")
+
+    data = world.to_dict()
+    data["regions"]["regions"][first.region_id]["biome_ids"] = ["missing-biome"]
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "bioma inesistente" in str(error).lower()
+    else:
+        raise AssertionError("A region referencing an unknown biome was loaded")
+
