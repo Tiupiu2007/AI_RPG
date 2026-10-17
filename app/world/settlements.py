@@ -68,9 +68,28 @@ class Settlement:
 
     def apply_demographic_year(self, *, health: float, happiness: float, prosperity: float, security: float) -> int:
         demography = self.sync_demography()
+        previous_total = self.population.total
         new_population = demography.simulate_year(health=health, happiness=happiness, prosperity=prosperity, security=security)
-        self.population.total = new_population
-        return new_population
+
+        if previous_total > 0 and self.population.groups:
+            exact_counts = {
+                group_id: group.count * new_population / previous_total
+                for group_id, group in self.population.groups.items()
+            }
+            for group_id, exact_count in exact_counts.items():
+                self.population.groups[group_id].count = int(exact_count)
+            remaining = new_population - sum(group.count for group in self.population.groups.values())
+            remainder_order = sorted(
+                exact_counts,
+                key=lambda group_id: exact_counts[group_id] - int(exact_counts[group_id]),
+                reverse=True,
+            )
+            for group_id in remainder_order[:remaining]:
+                self.population.groups[group_id].count += 1
+
+        self.population.recalculate_total()
+        demography.population = self.population.total
+        return self.population.total
 
     def update_settlement_type(self, *, prosperity: float, stability: float, security: float) -> str:
         """Update ordinary settlement tiers from population and conditions.
