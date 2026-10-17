@@ -94,9 +94,6 @@ class NarrativeRuntimeTests(unittest.TestCase):
         self.assertEqual(extra["quests"][0]["status"], "completed")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_turn_without_active_campaign_does_not_advance_world(self):
         from app.story_chat import story_turn
 
@@ -116,3 +113,8 @@ if __name__ == "__main__":
         advance_world_mock.assert_not_called()
         self.assertEqual(character["extra"]["game_state"]["turn"], 4)
 
+
+if __name__ == "__main__":
+    unittest.main()
+
+    
