@@ -764,6 +764,35 @@ def _social_update_matches_action(action: dict, engine_result: dict, update: dic
     )
 
 
+def _fallback_narration(action: dict, engine_result: dict) -> str:
+    """Fornisce un esito neutro quando il narratore AI non è disponibile."""
+    if engine_result.get("valid") is not True or engine_result.get("executed") is not True:
+        reason = engine_result.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return f"L'azione non è stata completata: {reason.strip()}"
+        return "L'azione non è stata completata."
+    action_type = action.get("type")
+    changes = engine_result.get("changes", {})
+    if action_type == "move" and isinstance(changes, dict) and "location" in changes:
+        destination = changes["location"].get("name") or changes["location"].get("to")
+        return f"Il movimento è stato completato. Destinazione registrata: {destination}."
+    if action_type == "use_item":
+        inventory = changes.get("inventory", {}) if isinstance(changes, dict) else {}
+        removed = inventory.get("removed", {}) if isinstance(inventory, dict) else {}
+        item = next(iter(removed), None)
+        return f"Hai usato {item}." if item else "L'uso dell'oggetto è stato completato."
+    if action_type == "talk":
+        return "Il dialogo è stato elaborato dal sistema di gioco."
+    if action_type in {"attack", "defend", "cast_magic", "flee"}:
+        return "L'azione di combattimento è stata elaborata e lo stato è stato salvato."
+    if action_type == "inspect":
+        return "L'azione di osservazione è stata registrata. La descrizione dettagliata non è disponibile in questo momento."
+    if action_type == "interact":
+        return "L'interazione è stata registrata. La descrizione dettagliata non è disponibile in questo momento."
+    return "Il turno è stato salvato, ma il narratore non è disponibile. Puoi continuare la partita.";
+}
+
+
 def story_turn(character_id: int, player_message: str):
     character = get_character(character_id)
     if character is None:
@@ -855,31 +884,35 @@ def story_turn(character_id: int, player_message: str):
         raise ValueError(f"Personaggio con ID {character_id} non trovato dopo l'esecuzione.")
     context = _build_context(refreshed, message)
 
-    narration_raw = ask_ollama(
-        _narration_prompt(context, history, message, action, engine_result),
-        json.dumps(
-            {
-                "player_message": message,
-                "action": action,
-                "engine_result": engine_result,
-                "instruction": "Racconta ora il risultato già determinato dal Game Engine.",
-            },
-            ensure_ascii=False,
-        ),
-    )
-
+    narration_result = {}
+    narration = None
     try:
-        narration_result = json.loads(narration_raw)
-    except json.JSONDecodeError as error:
-        raise ValueError("L'IA non ha restituito un JSON valido per la narrazione.") from error
+        narration_raw = ask_ollama(
+            _narration_prompt(context, history, message, action, engine_result),
+            json.dumps(
+                {
+                    "player_message": message,
+                    "action": action,
+                    "engine_result": engine_result,
+                    "instruction": "Racconta ora il risultato già determinato dal Game Engine.",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        parsed_narration = json.loads(narration_raw)
+        if isinstance(parsed_narration, dict):
+            candidate = parsed_narration.get("narration")
+            if isinstance(candidate, str) and candidate.strip():
+                narration_result = parsed_narration
+                narration = candidate.strip()
+    except Exception:
+        # Lo stato meccanico è già stato salvato: un guasto del narratore non
+        # deve far sembrare fallito il turno e indurre il PLAYER a ripeterlo.
+        pass
 
-    if not isinstance(narration_result, dict):
-        raise ValueError("La narrazione AI deve essere un oggetto JSON.")
-
-    narration = narration_result.get("narration")
-    if not isinstance(narration, str) or not narration.strip():
-        raise ValueError("L'IA non ha restituito una narrazione valida.")
-    narration = narration.strip()
+    if narration is None:
+        narration_result = {}
+        narration = _fallback_narration(action, engine_result)
 
     # Il prompt è una prima barriera; questa seconda barriera controlla
     # concretamente il testo restituito e forza una riscrittura se l'AI ha
@@ -894,10 +927,8 @@ def story_turn(character_id: int, player_message: str):
             narration,
         )
         if _narration_needs_repair(narration, message):
-            raise ValueError(
-                "La narrazione AI continua a contenere un'azione o uno stato "
-                "non autorizzato del PLAYER dopo la correzione."
-            )
+            narration_result = {}
+            narration = _fallback_narration(action, engine_result)
 
     action_options = _parse_action_options(narration_result.get("action_options"))
     narration = narration.rstrip() + "\\n\\n" + _format_action_options(action_options)
