@@ -306,6 +306,35 @@ class WorldState:
         world.conditions = dict(data.get("conditions", {}))
         world.metadata = dict(data.get("metadata", {}))
         world.updated_at = data.get("updated_at", _utc_now())
+
+        # Reject saves whose cross-object references would leave a broken world.
+        for route in world.geography.routes.values():
+            if route.origin_id not in world.locations or route.destination_id not in world.locations:
+                raise ValueError(f"Rotta '{route.route_id}' riferita a una località inesistente.")
+        for route in world.trade.routes.values():
+            if route.origin_id not in world.locations or route.destination_id not in world.locations:
+                raise ValueError(f"Rotta commerciale '{route.route_id}' riferita a una località inesistente.")
+        for settlement in world.settlements.settlements.values():
+            if settlement.location_id not in world.locations:
+                raise ValueError(f"Insediamento '{settlement.settlement_id}' riferito a una località inesistente.")
+            if settlement.region_id is not None and settlement.region_id not in world.regions.regions:
+                raise ValueError(f"Insediamento '{settlement.settlement_id}' riferito a una regione inesistente.")
+        for actor_id, position in world.actor_positions.items():
+            if position.location_id not in world.locations:
+                raise ValueError(f"L'attore '{actor_id}' ha una posizione riferita a una località inesistente.")
+            if position.destination_id is not None and position.destination_id not in world.locations:
+                raise ValueError(f"L'attore '{actor_id}' ha una destinazione riferita a una località inesistente.")
+            if any(route_id not in world.geography.routes for route_id in position.route_ids):
+                raise ValueError(f"L'attore '{actor_id}' ha un viaggio con rotte inesistenti.")
+        for resource in world.economy.resources.values():
+            if resource.location_id is not None and resource.location_id not in world.locations:
+                raise ValueError(f"La risorsa '{resource.resource_id}' è riferita a una località inesistente.")
+            if resource.region_id is not None and resource.region_id not in world.regions.regions:
+                raise ValueError(f"La risorsa '{resource.resource_id}' è riferita a una regione inesistente.")
+        for market in world.economy.markets.values():
+            if market.location_id not in world.locations:
+                raise ValueError(f"Il mercato '{market.market_id}' è riferito a una località inesistente.")
+
         return world
 
 
