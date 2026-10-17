@@ -57,13 +57,13 @@ class Population:
         race = race.strip()
         if not race:
             raise ValueError("La razza deve avere un nome.")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise ValueError("La popolazione deve essere un intero >= 0.")
         existing = next((group for group in self.groups.values() if group.race.casefold() == race.casefold()), None)
         if existing is None:
             existing = PopulationGroup.create(race, count)
             self.groups[existing.group_id] = existing
         else:
-            if count < 0:
-                raise ValueError("La popolazione non può essere negativa.")
             existing.count = count
         self.recalculate_total()
         return existing
