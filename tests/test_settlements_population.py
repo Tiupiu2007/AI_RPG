@@ -216,3 +216,47 @@ def test_trade_route_rejects_non_finite_or_negative_values():
             pass
         else:
             raise AssertionError(f"Invalid {field} accepted: {value!r}")
+
+
+def test_resource_nodes_reject_non_finite_values_without_mutation():
+    for invalid in (float("nan"), float("inf"), float("-inf")):
+        try:
+            ResourceNode.create("iron", invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid resource amount accepted: {invalid!r}")
+
+    resource = ResourceNode.create("iron", 10, regeneration_rate=2)
+    for operation in (
+        lambda: resource.advance(float("nan")),
+        lambda: resource.consume(float("inf")),
+    ):
+        before = resource.amount
+        try:
+            operation()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("A non-finite resource operation was accepted")
+        assert resource.amount == before
+
+
+def test_market_rejects_non_finite_prices_supply_and_demand():
+    market = Market.create("loc-1")
+    for operation in (
+        lambda: market.set_price("iron", float("nan")),
+        lambda: market.set_supply("iron", float("inf")),
+        lambda: market.set_demand("iron", float("-inf")),
+        lambda: market.update_price_from_supply_demand("iron", base_price=1, sensitivity=float("nan")),
+    ):
+        try:
+            operation()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("A non-finite market value was accepted")
+
+    assert market.prices == {}
+    assert market.supply == {}
+    assert market.demand == {}
