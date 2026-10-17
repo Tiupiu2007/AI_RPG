@@ -1,3 +1,4 @@
+from app.world.biomes import BiomeDefinition, BiomeMap, BiomeRegion
 from app.world.locations import Location
 from app.world.demography import DemographicState
 from app.world.population import Population, PopulationGroup
@@ -410,4 +411,26 @@ def test_adding_region_rejects_missing_parent_and_biome_without_mutation():
     else:
         raise AssertionError("A region with a missing biome was added")
     assert missing_biome.region_id not in world.regions.regions
+
+def test_biome_regions_reject_non_finite_geometry_and_invalid_identifiers():
+    invalid_regions = [
+        {"region_id": "r1", "biome_id": "forest", "center": {"x": float("nan"), "y": 0}, "radius": 2},
+        {"region_id": "r2", "biome_id": "forest", "center": {"x": 0, "y": 0}, "radius": float("inf")},
+        {"region_id": "r3", "biome_id": "forest", "center": {"x": 0, "y": 0}, "radius": 2, "transition_radius": float("nan")},
+        {"region_id": "", "biome_id": "forest", "center": {"x": 0, "y": 0}, "radius": 2},
+    ]
+    for data in invalid_regions:
+        try:
+            BiomeRegion(**data)
+        except (TypeError, ValueError):
+            pass
+        else:
+            raise AssertionError(f"Invalid biome region was accepted: {data}")
+
+    try:
+        BiomeMap().add_definition(BiomeDefinition(biome_id="", name="Forest"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("A biome definition with an empty ID was accepted")
 
