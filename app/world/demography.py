@@ -20,7 +20,7 @@ class DemographicState:
         if self.population < 0 or self.carrying_capacity < 1:
             raise ValueError("Stato demografico non valido.")
         quality = max(0.0, min(1.0, (health + happiness + prosperity + security) / 400.0))
-        pressure = max(0.0, min(1.0, self.population / self.carrying_capacity))
+        pressure = max(0.0, self.population / self.carrying_capacity)
         births = self.population * self.birth_rate * (0.5 + quality * 0.5)
         deaths = self.population * self.death_rate * (1.5 - quality * 0.5)
         migration = self.population * self.migration_rate * (quality - 0.5)
