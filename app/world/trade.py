@@ -26,9 +26,18 @@ class ProductionRule:
         return cls(rule_id or str(uuid.uuid4()), name.strip(), {k: float(v) for k, v in inputs.items()}, {k: float(v) for k, v in outputs.items()}, float(cycle_hours))
 
     def max_cycles(self, stock: dict[str, float]) -> int:
-        if not self.inputs:
+        consuming_inputs = {
+            resource: amount
+            for resource, amount in self.inputs.items()
+            if amount > 0
+        }
+        if not consuming_inputs:
+            # A recipe without positive inputs must not generate free resources.
             return 0
-        return max(0, min(int(stock.get(resource, 0.0) // amount) for resource, amount in self.inputs.items() if amount > 0))
+        return max(
+            0,
+            min(int(stock.get(resource, 0.0) // amount) for resource, amount in consuming_inputs.items()),
+        )
 
     def apply(self, stock: dict[str, float], cycles: int = 1) -> dict[str, float]:
         if cycles < 0 or cycles > self.max_cycles(stock):
