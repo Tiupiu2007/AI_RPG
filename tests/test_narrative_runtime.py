@@ -166,22 +166,24 @@ class NarrativeRuntimeTests(unittest.TestCase):
             "action": {"type": "none", "target_id": None, "target_text": None, "parameters": {}},
             "changes": {},
         }
-        with patch.object(story_chat, "get_character", return_value=character), \\
-             patch.object(story_chat, "_build_context", return_value={}), \\
-             patch.object(story_chat, "_build_system_prompt", return_value="intent prompt"), \\
-             patch.object(story_chat, "_narration_prompt", return_value="narration prompt"), \\
-             patch.object(story_chat, "ask_ollama", side_effect=[
-                 json.dumps({"action": {"type": "none"}}),
-                 RuntimeError("Ollama stopped"),
-             ]), \\
-             patch.object(story_chat, "advance_turn"), \\
-             patch.object(story_chat, "advance_world", return_value=1), \\
-             patch.object(story_chat, "execute_action", return_value=engine_result), \\
-             patch.object(story_chat, "save_character") as save_mock, \\
-             patch.object(story_chat, "record_world_event", return_value=101), \\
-             patch.object(story_chat, "create_event", return_value=202), \\
-             patch.object(story_chat, "_narration_needs_repair", return_value=False), \\
-             patch("app.game_engine.progression.apply_progression", return_value=None):
+        with (
+            patch.object(story_chat, "get_character", return_value=character),
+            patch.object(story_chat, "_build_context", return_value={}),
+            patch.object(story_chat, "_build_system_prompt", return_value="intent prompt"),
+            patch.object(story_chat, "_narration_prompt", return_value="narration prompt"),
+            patch.object(story_chat, "ask_ollama", side_effect=[
+                json.dumps({"action": {"type": "none"}}),
+                RuntimeError("Ollama stopped"),
+            ]),
+            patch.object(story_chat, "advance_turn"),
+            patch.object(story_chat, "advance_world", return_value=1),
+            patch.object(story_chat, "execute_action", return_value=engine_result),
+            patch.object(story_chat, "save_character") as save_mock,
+            patch.object(story_chat, "record_world_event", return_value=101),
+            patch.object(story_chat, "create_event", return_value=202),
+            patch.object(story_chat, "_narration_needs_repair", return_value=False),
+            patch("app.game_engine.progression.apply_progression", return_value=None),
+        ):
             result = story_chat.story_turn(17, "Guardo la stanza.")
 
         self.assertIn("turno è stato salvato", result["narration"])
