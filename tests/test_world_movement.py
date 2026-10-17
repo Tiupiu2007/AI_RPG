@@ -180,3 +180,32 @@ def test_begin_actor_travel_rejects_unavailable_route_without_mutating_position(
     assert position.location_id == a.location_id
     assert not position.is_traveling
     assert world.updated_at == initial_updated_at
+
+
+def test_world_load_rejects_route_to_missing_location():
+    world, a, b, _ = build_world()
+    data = world.to_dict()
+    route_data = next(iter(data["geography"]["routes"].values()))
+    route_data["destination_id"] = "missing-location"
+
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "località inesistente" in str(error)
+    else:
+        raise AssertionError("A save containing a route to a missing location was accepted")
+
+
+def test_world_load_rejects_actor_position_at_missing_location():
+    world, a, _, _ = build_world()
+    world.set_actor_position("hero", a.location_id)
+    data = world.to_dict()
+    data["actor_positions"]["hero"]["location_id"] = "missing-location"
+
+    try:
+        WorldState.from_dict(data)
+    except ValueError as error:
+        assert "posizione" in str(error)
+    else:
+        raise AssertionError("A save containing an actor at a missing location was accepted")
+
