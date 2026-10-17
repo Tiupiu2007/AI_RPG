@@ -355,7 +355,7 @@ def test_world_loading_rejects_missing_region_references():
     try:
         WorldState.from_dict(data)
     except ValueError as error:
-        assert "territorio razziale" in str(error)
+        assert "territorio razziale" in str(error).lower()
     else:
         raise AssertionError("A racial territory with a missing region was loaded")
 
