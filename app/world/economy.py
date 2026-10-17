@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
 import uuid
 
@@ -19,22 +20,29 @@ class ResourceNode:
 
     @classmethod
     def create(cls, resource_type: str, amount: float, *, location_id: str | None = None, region_id: str | None = None, regeneration_rate: float = 0.0, resource_id: str | None = None, metadata: dict[str, Any] | None = None) -> "ResourceNode":
-        if not resource_type.strip():
+        normalized_amount = float(amount)
+        normalized_regeneration = float(regeneration_rate)
+        if not isinstance(resource_type, str) or not resource_type.strip():
             raise ValueError("La risorsa deve avere un tipo.")
-        if amount < 0 or regeneration_rate < 0:
-            raise ValueError("Quantità e rigenerazione non possono essere negative.")
-        return cls(resource_id or str(uuid.uuid4()), resource_type.strip(), float(amount), float(regeneration_rate), location_id, region_id, dict(metadata or {}))
+        if (
+            not isfinite(normalized_amount) or normalized_amount < 0
+            or not isfinite(normalized_regeneration) or normalized_regeneration < 0
+        ):
+            raise ValueError("Quantità e rigenerazione devono essere finite e non negative.")
+        return cls(resource_id or str(uuid.uuid4()), resource_type.strip(), normalized_amount, normalized_regeneration, location_id, region_id, dict(metadata or {}))
 
     def advance(self, days: float = 1.0) -> float:
-        if days < 0:
-            raise ValueError("I giorni non possono essere negativi.")
-        self.amount += self.regeneration_rate * days
+        normalized_days = float(days)
+        if not isfinite(normalized_days) or normalized_days < 0:
+            raise ValueError("I giorni devono essere finiti e non negativi.")
+        self.amount += self.regeneration_rate * normalized_days
         return self.amount
 
     def consume(self, amount: float) -> None:
-        if amount < 0 or amount > self.amount:
+        normalized_amount = float(amount)
+        if not isfinite(normalized_amount) or normalized_amount < 0 or normalized_amount > self.amount:
             raise ValueError("Quantità di risorsa non disponibile.")
-        self.amount -= amount
+        self.amount -= normalized_amount
 
     def to_dict(self) -> dict[str, Any]:
         return {"resource_id": self.resource_id, "resource_type": self.resource_type, "amount": self.amount, "regeneration_rate": self.regeneration_rate, "location_id": self.location_id, "region_id": self.region_id, "metadata": dict(self.metadata)}
@@ -61,19 +69,34 @@ class Market:
         return cls(market_id or str(uuid.uuid4()), location_id, currency.strip() or "gold")
 
     def set_price(self, item: str, price: float) -> None:
-        if price < 0:
-            raise ValueError("Il prezzo non può essere negativo.")
-        self.prices[item.strip()] = float(price)
+        normalized_price = float(price)
+        if not isinstance(item, str) or not item.strip() or not isfinite(normalized_price) or normalized_price < 0:
+            raise ValueError("Prezzo o articolo non validi.")
+        self.prices[item.strip()] = normalized_price
 
     def set_supply(self, item: str, amount: float) -> None:
-        self.supply[item.strip()] = max(0.0, float(amount))
+        normalized_amount = float(amount)
+        if not isinstance(item, str) or not item.strip() or not isfinite(normalized_amount):
+            raise ValueError("Offerta o articolo non validi.")
+        self.supply[item.strip()] = max(0.0, normalized_amount)
 
     def set_demand(self, item: str, amount: float) -> None:
-        self.demand[item.strip()] = max(0.0, float(amount))
+        normalized_amount = float(amount)
+        if not isinstance(item, str) or not item.strip() or not isfinite(normalized_amount):
+            raise ValueError("Domanda o articolo non validi.")
+        self.demand[item.strip()] = max(0.0, normalized_amount)
 
     def update_price_from_supply_demand(self, item: str, *, base_price: float, sensitivity: float = 0.5) -> float:
-        if base_price < 0 or sensitivity < 0:
-            raise ValueError("Prezzo base e sensibilità non validi.")
+        normalized_base = float(base_price)
+        normalized_sensitivity = float(sensitivity)
+        if (
+            not isinstance(item, str) or not item.strip()
+            or not isfinite(normalized_base) or normalized_base < 0
+            or not isfinite(normalized_sensitivity) or normalized_sensitivity < 0
+        ):
+            raise ValueError("Prezzo base, articolo o sensibilità non validi.")
+        base_price = normalized_base
+        sensitivity = normalized_sensitivity
         supply = self.supply.get(item, 0.0)
         demand = self.demand.get(item, 0.0)
         if supply <= 0:
@@ -133,8 +156,9 @@ class EconomyState:
             resource.advance(days)
 
     def transfer_supply(self, origin_id: str, destination_id: str, item: str, amount: float) -> None:
-        if amount < 0:
-            raise ValueError("La quantità non può essere negativa.")
+        amount = float(amount)
+        if not isinstance(item, str) or not item.strip() or not isfinite(amount) or amount < 0:
+            raise ValueError("Quantità o articolo non validi.")
         origin = self.market_at(origin_id)
         destination = self.market_at(destination_id)
         if origin is None or destination is None:
