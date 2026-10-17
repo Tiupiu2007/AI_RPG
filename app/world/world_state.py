@@ -76,6 +76,61 @@ class WorldState:
         self.locations[location.location_id] = location
         self.update()
 
+    def remove_location(self, location_id: str) -> Location:
+        location = self.require_location(location_id)
+        if self.settlements.at_location(location_id) is not None:
+            raise ValueError("Impossibile rimuovere una località che contiene un insediamento.")
+        if any(route.origin_id == location_id or route.destination_id == location_id for route in self.geography.routes.values()):
+            raise ValueError("Impossibile rimuovere una località collegata a una rotta.")
+        for region in self.regions.regions.values():
+            if location_id in region.location_ids:
+                region.location_ids.remove(location_id)
+        for actor_id, position in list(self.actor_positions.items()):
+            if position.location_id == location_id or position.destination_id == location_id:
+                raise ValueError(f"Impossibile rimuovere una località usata dall'attore '{actor_id}'.")
+        del self.locations[location_id]
+        self.update()
+        return location
+
+    def add_settlement(self, settlement) -> None:
+        from .settlements import Settlement
+
+        if not isinstance(settlement, Settlement):
+            raise TypeError("È possibile aggiungere solo oggetti Settlement.")
+        location = self.require_location(settlement.location_id)
+        if settlement.region_id is not None and settlement.region_id not in self.regions.regions:
+            raise KeyError(f"Regione dell'insediamento non trovata: {settlement.region_id}")
+        self.settlements.add(settlement)
+        location.attributes["settlement_type"] = settlement.settlement_type
+        if settlement.region_id is not None:
+            self.regions.regions[settlement.region_id].add_location(location.location_id)
+        elif location.coordinates is not None:
+            region = self.region_at(location.coordinates)
+            if region is not None:
+                region.add_location(location.location_id)
+                settlement.region_id = region.region_id
+        self.update()
+
+    def settlement_at_location(self, location_id: str):
+        return self.settlements.at_location(location_id)
+
+    def population_at_location(self, location_id: str) -> int:
+        settlement = self.settlement_at_location(location_id)
+        return settlement.population.total if settlement is not None else 0
+
+    def racial_population_at_location(self, location_id: str) -> dict[str, int]:
+        settlement = self.settlement_at_location(location_id)
+        return settlement.population.distribution() if settlement is not None else {}
+
+    def population_in_region(self, region_id: str) -> int:
+        if region_id not in self.regions.regions:
+            raise KeyError(f"Regione non trovata: {region_id}")
+        return sum(
+            settlement.population.total
+            for settlement in self.settlements.settlements.values()
+            if settlement.region_id == region_id
+        )
+
     def get_location(self, location_id: str) -> Location | None:
         return self.locations.get(location_id)
 
