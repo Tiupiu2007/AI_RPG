@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
 import uuid
 
@@ -17,13 +18,17 @@ class ProductionRule:
 
     @classmethod
     def create(cls, name: str, inputs: dict[str, float], outputs: dict[str, float], *, cycle_hours: float = 24.0, rule_id: str | None = None) -> "ProductionRule":
-        if not name.strip() or cycle_hours <= 0:
+        normalized_cycle_hours = float(cycle_hours)
+        quantities = [float(value) for value in (*inputs.values(), *outputs.values())]
+        if not name.strip() or not isfinite(normalized_cycle_hours) or normalized_cycle_hours <= 0:
             raise ValueError("Regola di produzione non valida.")
         if not inputs and not outputs:
             raise ValueError("Una produzione deve avere input o output.")
-        if any(float(value) < 0 for value in {**inputs, **outputs}.values()):
-            raise ValueError("Le quantità non possono essere negative.")
-        return cls(rule_id or str(uuid.uuid4()), name.strip(), {k: float(v) for k, v in inputs.items()}, {k: float(v) for k, v in outputs.items()}, float(cycle_hours))
+        if any(not isfinite(value) or value < 0 for value in quantities):
+            raise ValueError("Le quantità devono essere finite e non negative.")
+        if any(not isinstance(key, str) or not key.strip() for key in (*inputs.keys(), *outputs.keys())):
+            raise ValueError("Le risorse in input e output devono avere un nome.")
+        return cls(rule_id or str(uuid.uuid4()), name.strip(), {k: float(v) for k, v in inputs.items()}, {k: float(v) for k, v in outputs.items()}, normalized_cycle_hours)
 
     def max_cycles(self, stock: dict[str, float]) -> int:
         consuming_inputs = {
@@ -40,7 +45,7 @@ class ProductionRule:
         )
 
     def apply(self, stock: dict[str, float], cycles: int = 1) -> dict[str, float]:
-        if cycles < 0 or cycles > self.max_cycles(stock):
+        if isinstance(cycles, bool) or not isinstance(cycles, int) or cycles < 0 or cycles > self.max_cycles(stock):
             raise ValueError("Numero di cicli di produzione non disponibile.")
         result = dict(stock)
         for resource, amount in self.inputs.items():
@@ -70,9 +75,22 @@ class TradeRoute:
 
     @classmethod
     def create(cls, origin_id: str, destination_id: str, *, goods: dict[str, float] | None = None, travel_hours: float = 0.0, tariff: float = 0.0, route_id: str | None = None) -> "TradeRoute":
-        if origin_id == destination_id or travel_hours < 0 or tariff < 0:
+        normalized_travel_hours = float(travel_hours)
+        normalized_tariff = float(tariff)
+        normalized_goods = {k: float(v) for k, v in (goods or {}).items()}
+        if (
+            not isinstance(origin_id, str) or not origin_id.strip()
+            or not isinstance(destination_id, str) or not destination_id.strip()
+            or origin_id == destination_id
+            or not isfinite(normalized_travel_hours) or normalized_travel_hours < 0
+            or not isfinite(normalized_tariff) or normalized_tariff < 0
+        ):
             raise ValueError("Rotta commerciale non valida.")
-        return cls(route_id or str(uuid.uuid4()), origin_id, destination_id, {k: float(v) for k, v in (goods or {}).items()}, True, float(travel_hours), float(tariff))
+        if any(not isinstance(key, str) or not key.strip() for key in normalized_goods):
+            raise ValueError("I beni della rotta devono avere un nome.")
+        if any(not isfinite(value) or value < 0 for value in normalized_goods.values()):
+            raise ValueError("Le quantità trasportate devono essere finite e non negative.")
+        return cls(route_id or str(uuid.uuid4()), origin_id, destination_id, normalized_goods, True, normalized_travel_hours, normalized_tariff)
 
     def to_dict(self) -> dict[str, Any]:
         return {"route_id": self.route_id, "origin_id": self.origin_id, "destination_id": self.destination_id, "goods": dict(self.goods), "active": self.active, "travel_hours": self.travel_hours, "tariff": self.tariff, "metadata": dict(self.metadata)}
