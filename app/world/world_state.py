@@ -85,6 +85,60 @@ class WorldState:
             raise KeyError(f"Località non trovata: {location_id}")
         return location
 
+    def get_route(self, route_id: str) -> Route | None:
+        return self.geography.get_route(route_id)
+
+    def routes_from(self, location_id: str, *, available_only: bool = True) -> list[Route]:
+        return self.geography.routes_from(location_id, available_only=available_only)
+
+    def set_actor_position(self, actor_id: str, location_id: str) -> ActorPosition:
+        if not isinstance(actor_id, str) or not actor_id.strip():
+            raise ValueError("actor_id non valido.")
+        self.require_location(location_id)
+        position = ActorPosition(actor_id=actor_id, location_id=location_id)
+        self.actor_positions[actor_id] = position
+        self.update()
+        return position
+
+    def require_actor_position(self, actor_id: str) -> ActorPosition:
+        position = self.actor_positions.get(actor_id)
+        if position is None:
+            raise KeyError(f"Posizione dell'attore non trovata: {actor_id}")
+        return position
+
+    def begin_actor_travel(
+        self,
+        actor_id: str,
+        destination_id: str,
+        route_ids: tuple[str, ...],
+    ) -> ActorPosition:
+        position = self.require_actor_position(actor_id)
+        self.require_location(destination_id)
+        for route_id in route_ids:
+            if self.get_route(route_id) is None:
+                raise KeyError(f"Rotta non trovata: {route_id}")
+        position.begin_travel(destination_id, route_ids)
+        self.update()
+        return position
+
+    def arrive_actor(self, actor_id: str, destination_id: str) -> ActorPosition:
+        position = self.require_actor_position(actor_id)
+        self.require_location(destination_id)
+        if not position.is_traveling:
+            raise ValueError("L'attore non è in viaggio.")
+        if position.destination_id != destination_id:
+            raise ValueError("La destinazione non corrisponde al viaggio attivo.")
+        position.arrive(destination_id)
+        self.update()
+        return position
+
+    def biomes_between_locations(self, first_id: str, second_id: str) -> list[str | None]:
+        first = self.require_location(first_id)
+        second = self.require_location(second_id)
+        if first.coordinates is None or second.coordinates is None:
+            return []
+        return self.biomes.transition_between(first.coordinates, second.coordinates)
+
     def add_route(self, route: Route) -> None:
         if route.origin_id not in self.locations or route.destination_id not in self.locations:
             raise KeyError("La rotta deve riferirsi a località esistenti.")
