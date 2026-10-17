@@ -35,7 +35,10 @@ class ResourceNode:
         normalized_days = float(days)
         if not isfinite(normalized_days) or normalized_days < 0:
             raise ValueError("I giorni devono essere finiti e non negativi.")
-        self.amount += self.regeneration_rate * normalized_days
+        new_amount = self.amount + self.regeneration_rate * normalized_days
+        if not isfinite(new_amount):
+            raise ValueError("La quantità risultante dalla rigenerazione deve essere finita.")
+        self.amount = new_amount
         return self.amount
 
     def consume(self, amount: float) -> None:
@@ -104,8 +107,10 @@ class Market:
         else:
             ratio = demand / supply
             price = base_price * max(0.1, 1.0 + sensitivity * (ratio - 1.0))
-        self.prices[item] = round(price, 4)
-        return self.prices[item]
+        if not isfinite(price) or price < 0:
+            raise ValueError("Il prezzo calcolato deve essere finito e non negativo.")
+        self.prices[item.strip()] = round(price, 4)
+        return self.prices[item.strip()]
 
     def rebalance_prices(self, base_prices: dict[str, float], *, sensitivity: float = 0.5) -> dict[str, float]:
         for item, base_price in base_prices.items():
@@ -118,9 +123,12 @@ class Market:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Market":
         result = cls.create(data["location_id"], currency=data.get("currency", "gold"), market_id=data.get("market_id"))
-        result.prices = dict(data.get("prices", {}))
-        result.supply = dict(data.get("supply", {}))
-        result.demand = dict(data.get("demand", {}))
+        for item, price in data.get("prices", {}).items():
+            result.set_price(item, price)
+        for item, amount in data.get("supply", {}).items():
+            result.set_supply(item, amount)
+        for item, amount in data.get("demand", {}).items():
+            result.set_demand(item, amount)
         result.metadata = dict(data.get("metadata", {}))
         return result
 
@@ -166,8 +174,11 @@ class EconomyState:
         available = origin.supply.get(item, 0.0)
         if amount > available:
             raise ValueError("Offerta insufficiente nel mercato di origine.")
+        destination_amount = destination.supply.get(item, 0.0) + amount
+        if not isfinite(destination_amount):
+            raise ValueError("L'offerta risultante nel mercato di destinazione deve essere finita.")
         origin.supply[item] = available - amount
-        destination.supply[item] = destination.supply.get(item, 0.0) + amount
+        destination.supply[item] = destination_amount
 
     def simulate_day(self, *, base_prices: dict[str, float] | None = None, sensitivity: float = 0.5) -> dict[str, dict[str, float]]:
         self.advance_resources(1.0)
