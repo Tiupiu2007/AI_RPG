@@ -28,6 +28,21 @@ def test_over_capacity_demography_applies_population_penalty():
     assert demography.population == 1900
 
 
+def test_set_race_count_rejects_non_integer_values_without_mutation():
+    population = Population()
+    population.set_race_count("Human", 700)
+    before = population.to_dict()
+
+    for invalid_count in (1.5, True, -1):
+        try:
+            population.set_race_count("Human", invalid_count)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid population count accepted: {invalid_count!r}")
+        assert population.to_dict() == before
+
+
 def test_population_is_aggregated_by_race():
     population = Population()
     population.add_group(PopulationGroup.create("Human", 700))
