@@ -249,7 +249,11 @@ def validate_action(extra: dict, action: dict) -> dict:
             # un semplice intent.
             from app.world.runtime import resolve_existing_location
             if resolve_existing_location(extra, target_text) is None:
-                return {"valid": False, "reason": "La destinazione non esiste nel mondo conosciuto.", "action": normalized}
+                # All'inizio della partita è consentito dichiarare esplicitamente
+                # il primo luogo. In una scena già collocata, il testo non può
+                # creare luoghi né aggirare la geografia del mondo.
+                if extra["game_state"].get("location") is not None:
+                    return {"valid": False, "reason": "La destinazione non esiste nel mondo conosciuto.", "action": normalized}
 
     if action_type == "talk":
         present = extra.get("characters_present", [])
