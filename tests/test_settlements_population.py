@@ -59,6 +59,19 @@ def test_settlement_is_attached_to_location_and_region():
     assert location.location_id in region.location_ids
 
 
+def test_yearly_demography_keeps_population_groups_consistent():
+    population = Population()
+    population.add_group(PopulationGroup.create("Human", 700))
+    population.add_group(PopulationGroup.create("Elf", 300))
+    settlement = Settlement.create("Arken", "loc-1", "village", population=population)
+    settlement.apply_demographic_year(health=100, happiness=100, prosperity=100, security=100)
+    assert sum(settlement.population.distribution().values()) == settlement.population.total
+    assert settlement.population.get_race_count("Human") == 704
+    assert settlement.population.get_race_count("Elf") == 301
+    assert abs(sum(group.share for group in settlement.population.groups.values()) - 1.0) < 1e-9
+    assert settlement.demography.population == settlement.population.total
+
+
 def test_population_and_settlement_survive_world_roundtrip():
     world = WorldState.create("Persistence")
     location = Location.create("Northhold", "city", coordinates={"x": 20, "y": 30})
