@@ -774,8 +774,12 @@ def _fallback_narration(action: dict, engine_result: dict) -> str:
     action_type = action.get("type")
     changes = engine_result.get("changes", {})
     if action_type == "move" and isinstance(changes, dict) and "location" in changes:
-        destination = changes["location"].get("name") or changes["location"].get("to")
-        return f"Il movimento è stato completato. Destinazione registrata: {destination}."
+        location = changes["location"]
+        if isinstance(location, dict):
+            destination = location.get("name") or location.get("to")
+            if destination:
+                return f"Il movimento è stato completato. Destinazione registrata: {destination}."
+        return "Il movimento è stato completato e la posizione è stata salvata."
     if action_type == "use_item":
         inventory = changes.get("inventory", {}) if isinstance(changes, dict) else {}
         removed = inventory.get("removed", {}) if isinstance(inventory, dict) else {}
@@ -917,15 +921,18 @@ def story_turn(character_id: int, player_message: str):
     # concretamente il testo restituito e forza una riscrittura se l'AI ha
     # comunque inventato un'azione/stato del PLAYER.
     if _narration_needs_repair(narration, message):
-        narration = _repair_narration(
-            context,
-            history,
-            message,
-            action,
-            engine_result,
-            narration,
-        )
-        if _narration_needs_repair(narration, message):
+        try:
+            narration = _repair_narration(
+                context,
+                history,
+                message,
+                action,
+                engine_result,
+                narration,
+            )
+        except Exception:
+            narration = ""
+        if not narration or _narration_needs_repair(narration, message):
             narration_result = {}
             narration = _fallback_narration(action, engine_result)
 
