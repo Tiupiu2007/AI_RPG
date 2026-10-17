@@ -937,7 +937,7 @@ def story_turn(character_id: int, player_message: str):
             narration = _fallback_narration(action, engine_result)
 
     action_options = _parse_action_options(narration_result.get("action_options"))
-    narration = narration.rstrip() + "\\n\\n" + _format_action_options(action_options)
+    narration = narration.rstrip() + "\n\n" + _format_action_options(action_options)
 
     canon_facts = _parse_canon_facts(narration_result.get("canon_facts"))
     npc_updates = _parse_npc_updates(narration_result.get("npc_updates"))
