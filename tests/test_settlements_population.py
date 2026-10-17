@@ -385,3 +385,29 @@ def test_world_loading_rejects_region_cycles_and_missing_biomes():
     else:
         raise AssertionError("A region referencing an unknown biome was loaded")
 
+def test_adding_region_rejects_missing_parent_and_biome_without_mutation():
+    world = WorldState.create("Region validation")
+    missing_parent = Region.create(
+        "Orphan", x_min=0, x_max=10, y_min=0, y_max=10,
+        parent_region_id="missing-parent",
+    )
+    try:
+        world.add_region(missing_parent)
+    except KeyError as error:
+        assert "genitore" in str(error).lower()
+    else:
+        raise AssertionError("A region with a missing parent was added")
+    assert missing_parent.region_id not in world.regions.regions
+
+    missing_biome = Region.create(
+        "Unknown biome", x_min=0, x_max=10, y_min=0, y_max=10,
+        biome_ids=["missing-biome"],
+    )
+    try:
+        world.add_region(missing_biome)
+    except KeyError as error:
+        assert "biomi esistenti" in str(error).lower()
+    else:
+        raise AssertionError("A region with a missing biome was added")
+    assert missing_biome.region_id not in world.regions.regions
+
