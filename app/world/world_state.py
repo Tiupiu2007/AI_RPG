@@ -226,6 +226,12 @@ class WorldState:
         self.update()
 
     def add_region(self, region: Region) -> None:
+        if region.parent_region_id is not None and region.parent_region_id not in self.regions.regions:
+            raise KeyError("La regione genitore deve esistere prima di aggiungere la regione.")
+        if any(biome_id not in self.biomes.definitions for biome_id in region.biome_ids):
+            raise KeyError("La regione deve riferirsi a biomi esistenti.")
+        if any(location_id not in self.locations for location_id in region.location_ids):
+            raise KeyError("La regione deve riferirsi a località esistenti.")
         self.regions.add_region(region)
         self.update()
 
