@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import re
 import uuid
 
 from .world_repository import WorldRepository
@@ -121,10 +122,29 @@ def move_actor(extra: dict[str, Any], actor_id: int, target_id: str | None = Non
     if target is None and target_name:
         target = resolve_existing_location(extra, target_name)
 
+    previous = extra.get("game_state", {}).get("location")
+
+    # Se il gioco non ha ancora una posizione iniziale, un nome esplicito
+    # può definire il primo luogo del mondo. Dopo l'inizio, i luoghi nuovi
+    # richiedono una creazione esplicita nel sistema del mondo.
+    if target is None and target_name and previous is None:
+        name = " ".join(str(target_name).strip().split())
+        if not name:
+            raise ValueError("Il nome della destinazione non può essere vuoto.")
+        slug = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_") or "luogo"
+        location_id = f"loc_{slug}"
+        if world.get_location(location_id) is not None:
+            location_id = f"{location_id}_{uuid.uuid4().hex[:8]}"
+        target = Location.create(
+            name,
+            "room",
+            location_id=location_id,
+        )
+        world.add_location(target)
+
     if target is None:
         raise ValueError("Destinazione non trovata nel mondo persistente.")
 
-    previous = extra.get("game_state", {}).get("location")
     if previous is not None and target.location_id != str(previous):
         reachable = set(reachable_location_ids(extra))
         if target.location_id not in reachable:
