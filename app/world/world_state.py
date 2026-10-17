@@ -308,6 +308,14 @@ class WorldState:
         world.updated_at = data.get("updated_at", _utc_now())
 
         # Reject saves whose cross-object references would leave a broken world.
+        for region in world.regions.regions.values():
+            if region.parent_region_id is not None and region.parent_region_id not in world.regions.regions:
+                raise ValueError(f"Regione '{region.region_id}' riferita a una regione genitore inesistente.")
+            if any(location_id not in world.locations for location_id in region.location_ids):
+                raise ValueError(f"Regione '{region.region_id}' contiene località inesistenti.")
+        for territory in world.regions.racial_territories.values():
+            if territory.region_id is not None and territory.region_id not in world.regions.regions:
+                raise ValueError(f"Territorio razziale '{territory.territory_id}' riferito a una regione inesistente.")
         for route in world.geography.routes.values():
             if route.origin_id not in world.locations or route.destination_id not in world.locations:
                 raise ValueError(f"Rotta '{route.route_id}' riferita a una località inesistente.")
