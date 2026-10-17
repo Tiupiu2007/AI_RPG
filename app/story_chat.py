@@ -394,6 +394,9 @@ Non scrivere mai azioni future del PLAYER come già compiute.
 CONTEXT AUTOREVOLE:
 {context_text}
 
+SCELTA NUMERICA DEL PLAYER
+Se il messaggio attuale del PLAYER è esattamente un numero da 1 a 4, interpretalo come selezione della corrispondente possibilità numerata nell'ULTIMO messaggio del NARRATORE. Usa il testo di quella possibilità per identificare l'intento e il bersaglio, senza eseguire azioni diverse da quelle scelte. Se non riesci a identificare con certezza la possibilità corrispondente, chiedi chiarimento nella narration e usa action type none.
+
 ULTIMI MESSAGGI:
 {previous_text}
 """.strip()
