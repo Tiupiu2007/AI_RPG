@@ -119,6 +119,15 @@ class NarrativeRuntimeTests(unittest.TestCase):
         )
         self.assertIn("turno è stato salvato", generic)
 
+
+    def test_system_prompt_routes_direct_npc_dialogue_to_talk_action(self):
+        from app.story_chat import _build_system_prompt
+
+        prompt = _build_system_prompt({"player": {"name": "Nox", "id": 1}}, [])
+        self.assertIn("usa `talk`", prompt)
+        self.assertIn("indica il suo `target_id`", prompt)
+        self.assertIn("senza inventare ID", prompt)
+
     def test_social_updates_require_successful_talk_action(self):
         from app.story_chat import _social_update_matches_action
 
