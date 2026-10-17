@@ -152,6 +152,9 @@ class WorldState:
         if not isinstance(actor_id, str) or not actor_id.strip():
             raise ValueError("actor_id non valido.")
         self.require_location(location_id)
+        existing = self.actor_positions.get(actor_id)
+        if existing is not None and existing.is_traveling:
+            raise ValueError("Impossibile cambiare posizione a un attore mentre è in viaggio.")
         position = ActorPosition(actor_id=actor_id, location_id=location_id)
         self.actor_positions[actor_id] = position
         self.update()
