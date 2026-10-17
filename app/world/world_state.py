@@ -84,6 +84,10 @@ class WorldState:
             raise ValueError("Impossibile rimuovere una località collegata a una rotta.")
         if any(route.origin_id == location_id or route.destination_id == location_id for route in self.trade.routes.values()):
             raise ValueError("Impossibile rimuovere una località collegata a una rotta commerciale.")
+        if any(resource.location_id == location_id for resource in self.economy.resources.values()):
+            raise ValueError("Impossibile rimuovere una località con risorse registrate.")
+        if any(market.location_id == location_id for market in self.economy.markets.values()):
+            raise ValueError("Impossibile rimuovere una località che ospita un mercato.")
         for actor_id, position in list(self.actor_positions.items()):
             if position.location_id == location_id or position.destination_id == location_id:
                 raise ValueError(f"Impossibile rimuovere una località usata dall'attore '{actor_id}'.")
