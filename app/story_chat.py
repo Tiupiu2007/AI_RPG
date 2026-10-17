@@ -751,6 +751,19 @@ La narrazione deve essere in italiano, naturale, concreta e coerente.
 """.strip()
 
 
+def _social_update_matches_action(action: dict, engine_result: dict, update: dict) -> bool:
+    """Consente effetti sociali solo per un dialogo realmente eseguito con l'NPC bersaglio."""
+    return (
+        isinstance(action, dict)
+        and action.get("type") == "talk"
+        and isinstance(engine_result, dict)
+        and engine_result.get("valid") is True
+        and engine_result.get("executed") is True
+        and isinstance(update, dict)
+        and update.get("character_id") == action.get("target_id")
+    )
+
+
 def story_turn(character_id: int, player_message: str):
     character = get_character(character_id)
     if character is None:
@@ -912,9 +925,9 @@ def story_turn(character_id: int, player_message: str):
     social_results = []
     from app.game_engine.narrative_effects import apply_social_effects
     for update in npc_updates:
-        target_id = update["character_id"]
-        if action.get("type") != "talk" or action.get("target_id") != target_id:
+        if not _social_update_matches_action(action, engine_result, update):
             continue
+        target_id = update["character_id"]
         try:
             effects = dict(update.get("social_effects") or {})
             effects.update({
