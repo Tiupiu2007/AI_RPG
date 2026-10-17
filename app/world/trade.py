@@ -31,6 +31,17 @@ class ProductionRule:
         return cls(rule_id or str(uuid.uuid4()), name.strip(), {k: float(v) for k, v in inputs.items()}, {k: float(v) for k, v in outputs.items()}, normalized_cycle_hours)
 
     def max_cycles(self, stock: dict[str, float]) -> int:
+        if not isinstance(stock, dict):
+            raise TypeError("Le scorte devono essere un dizionario.")
+        for resource, raw_amount in stock.items():
+            if not isinstance(resource, str) or not resource.strip():
+                raise ValueError("I nomi delle risorse in magazzino non possono essere vuoti.")
+            try:
+                amount = float(raw_amount)
+            except (TypeError, ValueError) as error:
+                raise ValueError("Le scorte devono essere numeriche, finite e non negative.") from error
+            if not isfinite(amount) or amount < 0:
+                raise ValueError("Le scorte devono essere numeriche, finite e non negative.")
         consuming_inputs = {
             resource: amount
             for resource, amount in self.inputs.items()
@@ -52,6 +63,8 @@ class ProductionRule:
             result[resource] = result.get(resource, 0.0) - amount * cycles
         for resource, amount in self.outputs.items():
             result[resource] = result.get(resource, 0.0) + amount * cycles
+        if any(not isfinite(float(value)) or float(value) < 0 for value in result.values()):
+            raise ValueError("Le scorte risultanti dalla produzione devono essere finite e non negative.")
         return result
 
     def to_dict(self) -> dict[str, Any]:
