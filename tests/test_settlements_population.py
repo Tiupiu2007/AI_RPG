@@ -1,9 +1,31 @@
 from app.world.locations import Location
+from app.world.demography import DemographicState
 from app.world.population import Population, PopulationGroup
 from app.world.regions import Region
 from app.world.settlements import Settlement
 from app.world.trade import TradeRoute
 from app.world.world_state import WorldState
+
+
+def test_over_capacity_demography_applies_population_penalty():
+    demography = DemographicState(
+        settlement_id="overcrowded",
+        population=2000,
+        carrying_capacity=1000,
+        birth_rate=0.0,
+        death_rate=0.0,
+        migration_rate=0.0,
+    )
+
+    result = demography.simulate_year(
+        health=100,
+        happiness=100,
+        prosperity=100,
+        security=100,
+    )
+
+    assert result == 1900
+    assert demography.population == 1900
 
 
 def test_population_is_aggregated_by_race():
