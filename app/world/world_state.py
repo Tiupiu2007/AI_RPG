@@ -311,8 +311,22 @@ class WorldState:
         for region in world.regions.regions.values():
             if region.parent_region_id is not None and region.parent_region_id not in world.regions.regions:
                 raise ValueError(f"Regione '{region.region_id}' riferita a una regione genitore inesistente.")
+            if any(biome_id not in world.biomes.definitions for biome_id in region.biome_ids):
+                raise ValueError(f"Regione '{region.region_id}' riferita a un bioma inesistente.")
             if any(location_id not in world.locations for location_id in region.location_ids):
                 raise ValueError(f"Regione '{region.region_id}' contiene località inesistenti.")
+
+        # Region hierarchies must be acyclic.
+        for region in world.regions.regions.values():
+            visited: set[str] = set()
+            current = region
+            while current.parent_region_id is not None:
+                if current.region_id in visited:
+                    raise ValueError(f"La gerarchia delle regioni contiene un ciclo presso '{current.region_id}'.")
+                visited.add(current.region_id)
+                current = world.regions.regions[current.parent_region_id]
+                if current.region_id in visited:
+                    raise ValueError(f"La gerarchia delle regioni contiene un ciclo presso '{current.region_id}'.")
         for territory in world.regions.racial_territories.values():
             if territory.region_id is not None and territory.region_id not in world.regions.regions:
                 raise ValueError(f"Territorio razziale '{territory.territory_id}' riferito a una regione inesistente.")
