@@ -764,16 +764,17 @@ def story_turn(character_id: int, player_message: str):
     if not isinstance(extra, dict):
         extra = {}
 
+    # Verifica prima i prerequisiti: un tentativo senza campagna attiva non
+    # deve avanzare il turno né simulare il mondo.
+    campaign = extra.get("campaign")
+    if not isinstance(campaign, dict) or not campaign.get("started"):
+        raise ValueError("Nessuna storia attiva. Crea prima una nuova storia dalla schermata di avvio.")
+
     ensure_game_state(extra)
-    advance_turn(extra)
-    world_tick = advance_world(extra, 1)
     history = _clean_history(extra)
 
     # PASSO 1: l'AI interpreta l'intento. In questa fase non produciamo ancora
     # la narrazione mostrata al giocatore.
-    campaign = extra.get("campaign")
-    if not isinstance(campaign, dict) or not campaign.get("started"):
-        raise ValueError("Nessuna storia attiva. Crea prima una nuova storia dalla schermata di avvio.")
     context = _build_context(character, message)
     intent_prompt = _build_system_prompt(context, history)
     raw_intent = ask_ollama(
@@ -802,6 +803,11 @@ def story_turn(character_id: int, player_message: str):
         raise ValueError("L'interpretazione dell'azione deve essere un oggetto JSON.")
 
     action = _parse_action(parsed_intent.get("action"))
+
+    # Il tempo avanza solo dopo aver ricevuto un intento interpretabile.
+    # Un errore del provider o un JSON non valido non consuma un turno.
+    advance_turn(extra)
+    world_tick = advance_world(extra, 1)
 
     # PASSO 2: il Game Engine decide cosa è realmente successo.
     engine_result = execute_action(extra, action, actor_id=character_id)
