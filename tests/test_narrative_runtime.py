@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from app.game_engine.quests import active_quests, apply_quest_updates
 
@@ -95,3 +96,23 @@ class NarrativeRuntimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_turn_without_active_campaign_does_not_advance_world(self):
+        from app.story_chat import story_turn
+
+        character = {
+            "id": 17,
+            "identity": object(),
+            "languages": [],
+            "extra": {"campaign": {"started": False}, "game_state": {"turn": 4}},
+        }
+        with patch("app.story_chat.get_character", return_value=character), \
+             patch("app.story_chat.advance_turn") as advance_turn_mock, \
+             patch("app.story_chat.advance_world") as advance_world_mock:
+            with self.assertRaisesRegex(ValueError, "Nessuna storia attiva"):
+                story_turn(17, "Guardo la stanza.")
+
+        advance_turn_mock.assert_not_called()
+        advance_world_mock.assert_not_called()
+        self.assertEqual(character["extra"]["game_state"]["turn"], 4)
+
