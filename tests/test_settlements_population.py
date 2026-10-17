@@ -1,7 +1,7 @@
 from app.world.locations import Location
 from app.world.demography import DemographicState
 from app.world.population import Population, PopulationGroup
-from app.world.regions import Region
+from app.world.regions import Region, RacialTerritory
 from app.world.settlements import Settlement
 from app.world.economy import Market, ResourceNode
 from app.world.trade import ProductionRule, TradeRoute
@@ -260,3 +260,37 @@ def test_market_rejects_non_finite_prices_supply_and_demand():
     assert market.prices == {}
     assert market.supply == {}
     assert market.demand == {}
+
+
+def test_regions_reject_non_finite_bounds():
+    for invalid in (float("nan"), float("inf"), float("-inf")):
+        try:
+            Region.create("Broken", x_min=0, x_max=invalid, y_min=0, y_max=10)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Non-finite region bound accepted: {invalid!r}")
+
+    region = Region.create("Valid", x_min=0, x_max=10, y_min=0, y_max=10)
+    for coordinates in ({"x": float("nan"), "y": 1}, {"x": 1, "y": float("inf")}):
+        try:
+            region.contains(coordinates)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Non-finite coordinates accepted: {coordinates!r}")
+
+
+def test_racial_territories_reject_non_finite_values():
+    for invalid in (float("nan"), float("inf"), float("-inf")):
+        for kwargs in (
+            {"concentration": invalid, "x_min": 0, "x_max": 10, "y_min": 0, "y_max": 10},
+            {"concentration": 0.5, "x_min": 0, "x_max": invalid, "y_min": 0, "y_max": 10},
+        ):
+            try:
+                RacialTerritory.create("Elf", "Woodlands", **kwargs)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"Non-finite territory value accepted: {kwargs!r}")
+
