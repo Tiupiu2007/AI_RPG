@@ -434,3 +434,23 @@ def test_biome_regions_reject_non_finite_geometry_and_invalid_identifiers():
     else:
         raise AssertionError("A biome definition with an empty ID was accepted")
 
+def test_production_rejects_invalid_stock_and_overflow_without_mutation():
+    rule = ProductionRule.create("Smelt", {"ore": 1}, {"ingot": 2})
+    for stock in ({"ore": float("nan")}, {"ore": float("inf")}, {"ore": -1}, {"ore": "invalid"}):
+        try:
+            rule.max_cycles(stock)
+        except (TypeError, ValueError):
+            pass
+        else:
+            raise AssertionError(f"Invalid stock was accepted: {stock}")
+
+    stock = {"ore": 1, "ingot": float("1e308")}
+    original = dict(stock)
+    try:
+        ProductionRule.create("Overflow", {"ore": 1}, {"ingot": 1e308}).apply(stock, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Production overflow was accepted")
+    assert stock == original
+
