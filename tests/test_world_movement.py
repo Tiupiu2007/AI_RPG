@@ -48,6 +48,7 @@ def test_unreachable_destination_does_not_change_position():
     isolated = Location.create("D", "area", coordinates={"x": 100, "y": 0})
     world.add_location(isolated)
     world.set_actor_position("hero", a.location_id)
+    initial_time = world.clock.current_time
     engine = MovementEngine(world)
     try:
         engine.travel("hero", isolated.location_id, base_speed=10)
@@ -56,7 +57,7 @@ def test_unreachable_destination_does_not_change_position():
     else:
         raise AssertionError("Unreachable destination was accepted")
     assert world.require_actor_position("hero").location_id == a.location_id
-    assert world.clock.current_time == world.clock.start_time
+    assert world.clock.current_time == initial_time
 
 
 def test_world_roundtrip_preserves_geography_biomes_and_position():
